@@ -5,6 +5,7 @@
 require_once("common.php");
 require_once('config.php');
 require_once('universeentry.php');
+require_once('fppdefines.php');
 include 'common/menuHead.inc';
 
 //$settings['Platform'] = "Raspberry Pi"; // Uncomment for testing
@@ -143,8 +144,10 @@ function handleCOKeypress(e)
 	if (e.keyCode == 113) {
 		if (currentTabTitle == "Pi Pixel Strings")
 			setPixelStringsStartChannelOnNextRow();
-        if (currentTabTitle == "BBB Strings")
-            setPixelStringsStartChannelOnNextRow();
+		else if (currentTabTitle == "BBB Strings")
+			setPixelStringsStartChannelOnNextRow();
+		else if (currentTabTitle == "X11 Pixel Strings")
+			setPixelStringsStartChannelOnNextRow();
 	}
 }
 
@@ -183,59 +186,11 @@ $(document).ready(function(){
 		else
 			$tabs.unbind('tabsload');
 	}).tabs('load',currentLoadingTab);
+
+    $(document).tooltip();
 });
 
 </script>
-<!-- FIXME, move this to CSS to standardize the UI -->
-<style>
-.tblheader{
-    background-color:#CCC;
-    text-align:center;
-}
-.tblheader td {
-    border: solid 2px #888888;
-    text-align:center;
-}
-tr.rowUniverseDetails
-{
-    border:thin solid;
-    border-color:#CCC;
-}
-
-tr.rowUniverseDetails td
-{
-    padding:1px 5px;
-}
-
-.channelOutputTable
-{
-    border:thin;
-    border-color:#333;
-    border-collapse: collapse;
-}
-
-#tblUniverses th {
-	vertical-align: bottom;
-	text-align: center;
-	border: solid 2px #888888;
-    font-size: 0.8em;
-}
-
-#tblUniverses td {
-	text-align: center;
-}
-
-#tblUniverses input[type=text] {
-	text-align: center;
-	width: 100%;
-}
-#tblUniverses input[type=number] {
-    text-align: center;
-    width: 100%;
-}
-
-</style>
-
 <title><? echo $pageTitle; ?></title>
 </head>
 <body>
@@ -263,6 +218,10 @@ tr.rowUniverseDetails td
             echo "<li><a href='#tab-BBB48String'>BBB Strings</a></li>\n";
         }
 	}
+    if ((file_exists('/usr/include/X11/Xlib.h')) &&
+        ($settings['Platform'] == "Linux")) {
+        echo "<li><a href='#tab-PixelStrings'>X11 Pixel Strings</a></li>\n";
+    }
     if (in_array('all', $currentCapeInfo["provides"]) || !in_array('strings', $currentCapeInfo["provides"])) {
         echo "<li><a href='#tab-LEDPanels'>LED Panels</a></li>\n";
     }
@@ -295,6 +254,11 @@ if ($settings['Platform'] == "BeagleBone Black")
     if (in_array('all', $currentCapeInfo["provides"]) || in_array('strings', $currentCapeInfo["provides"])) {
         include_once('co-bbbStrings.php');
     }
+}
+
+if ((file_exists('/usr/include/X11/Xlib.h')) &&
+    ($settings['Platform'] == "Linux")) {
+    include_once('co-piPixelString.php');
 }
 
 include_once("co-other.php");

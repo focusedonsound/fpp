@@ -56,7 +56,8 @@ extern "C"
 #include "SDLOut.h"
 #include "Sequence.h"
 #include "settings.h"
-#include "PixelOverlay.h"
+#include "overlays/PixelOverlay.h"
+#include "overlays/PixelOverlayModel.h"
 #include "Warnings.h"
 #include "channeloutput/channeloutputthread.h"
 
@@ -907,7 +908,6 @@ SDLOutput::SDLOutput(const std::string &mediaFilename,
 
     data->stopped = 0;
     data->maybeFillBuffer(true);
-
 }
 
 /*
@@ -1081,7 +1081,8 @@ int SDLOutput::Stop(void)
         if (data->video_stream_idx >= 0) {
             data->video_stream_idx = -1;
             if (data->videoOverlayModel) {
-                data->videoOverlayModel->clear();
+                data->videoOverlayModel->clearOverlayBuffer();
+                data->videoOverlayModel->flushOverlayBuffer();
                 data->videoOverlayModel->setState(PixelOverlayState::Disabled);
             }
         }

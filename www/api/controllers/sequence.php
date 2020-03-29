@@ -49,7 +49,7 @@ function GetSequenceMetaData() {
         $file = $file . ".fseq";
     }
     if (file_exists($file)) {
-        $cmd = "/opt/fpp/src/fsequtils -j $file 2>&1";
+        $cmd = "/opt/fpp/src/fsequtils -j \"$file\" 2>&1";
         exec( $cmd, $output);
         $js = json_decode($output[0]);
         return json($js);
@@ -74,7 +74,12 @@ function PostSequence() {
     }
     fclose($fp);
     fclose($putdata);
-    return 0;
+
+    $resp = Array();
+    $resp['Status'] = 'OK';
+    $resp['Message'] = '';
+
+    return json($resp);
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -89,7 +94,12 @@ function DeleteSequences() {
     if (file_exists($file)) {
         unlink($file);
     }
-    return 0;
+
+    $resp = Array();
+    $resp['Status'] = 'OK';
+    $resp['Message'] = '';
+
+    return json($resp);
 }
 
 

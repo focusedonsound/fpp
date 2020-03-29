@@ -7,31 +7,15 @@
 }
 
 .outputTable th {
-	vertical-align: bottom;
-    font-size: 0.9em;
+    vertical-align: bottom;
+    text-align: center;
+    border: solid 2px #888888;
+    font-size: 0.8em;
 }
 
 .outputTable td {
 	text-align: center;
     padding: 0px 9px 0px 0px ;
-}
-
-.addButton {
-	background-image: url(images/addicon.gif);
-	width: 12px;
-	height: 12px;
-	display: block;
-	background-size: 12px 12px;
-	background-repeat: no-repeat;
-}
-
-.deleteButton {
-	background-image: url(images/deleteicon.gif);
-	width: 12px;
-	height: 12px;
-	display: block;
-	background-size: 12px 12px;
-	background-repeat: no-repeat;
 }
 
 .outputTable tbody tr td input[type=text] {
@@ -280,8 +264,8 @@ function pixelOutputTableRow(type, protocols, protocol, oid, port, sid, descript
         result += "class='addButton' onClick='addVirtualString(this);'></td>";
     }
     
-    result += "<td><input type='text' class='vsDescription' size='30' value='" + description + "'></td>";
-    result += "<td><input type='number' class='vsStartChannel' size='6' value='" + startChannel + "' min='1' max='8388608' onChange='updateItemEndChannel(this);' onkeypress='this.onchange();' onpaste='this.onchange();' oninput='this.onchange();'></td>";
+    result += "<td><input type='text' class='vsDescription' size='25' maxlength='60' value='" + description + "'></td>";
+    result += "<td><input type='number' class='vsStartChannel' size='6' value='" + startChannel + "' min='1' max='<? echo FPPD_MAX_CHANNELS; ?>' onChange='updateItemEndChannel(this);' onkeypress='this.onchange();' onpaste='this.onchange();' oninput='this.onchange();'></td>";
     result += "<td><input type='number' class='vsPixelCount' size='4' min='1' max='1600' value='" + pixelCount + "' onChange='updateItemEndChannel(this);' onkeypress='this.onchange();' onpaste='this.onchange();' oninput='this.onchange();'></td>";
     result += "<td><input type='number' class='vsGroupCount' size='3' value='" + groupCount + "' min='1' max='1000' onChange='updateItemEndChannel(this);'></td>";
     if (groupCount == 0) {
@@ -319,6 +303,11 @@ function setPixelStringsStartChannelOnNextRow()
 
         if (nextRow.html().indexOf('<hr>') != -1)
             nextRow = nextRow.next('tr');
+        if (!nextRow.is(":visible")) {
+            nextRow = nextRow.next('tr');
+        }
+            
+        
 
         nextRow.find('.vsStartChannel').val(nextStart);
         nextRow.addClass('selectedEntry');
@@ -395,6 +384,9 @@ function cloneSelectedString()
     var sStartChannel = parseInt(row.find('.vsStartChannel').val());
     var sPixelCount = parseInt(row.find('.vsPixelCount').val());
     var nextRow = row.closest('tr').next('tr');
+
+    if (nextRow.find('td.vsPortLabel').length == 0)
+        nextRow = nextRow.closest('tr').next('tr');
     
     row.find('.vsDescription').val(sDescription + '0');
     
@@ -414,6 +406,9 @@ function cloneSelectedString()
                    row.find('.vsGamma').val());
         
         nextRow = nextRow.closest('tr').next('tr');
+
+        if (nextRow.find('td.vsPortLabel').length == 0)
+            nextRow = nextRow.closest('tr').next('tr');
     }
 }
 
@@ -476,17 +471,30 @@ function getPixelStringOutputJSON()
                         var vs = {};
 
                         var row = $('#' + id);
-
-                        vs.description = row.find('.vsDescription').val();
-                        vs.startChannel = parseInt(row.find('.vsStartChannel').val()) - 1;
-                        vs.pixelCount = parseInt(row.find('.vsPixelCount').val());
-                        vs.groupCount = parseInt(row.find('.vsGroupCount').val());
-                        vs.reverse = parseInt(row.find('.vsReverse').val());
-                        vs.colorOrder = row.find('.vsColorOrder').val();
-                        vs.nullNodes = parseInt(row.find('.vsNullNodes').val());
-                        vs.zigZag = parseInt(row.find('.vsZigZag').val());
-                        vs.brightness = parseInt(row.find('.vsBrightness').val());
-                        vs.gamma = row.find('.vsGamma').val();
+                                  
+                        if (!row.is(":visible")) {
+                            vs.pixelCount = 0;
+                            vs.description = "";
+                            vs.startChannel = 0;
+                            vs.groupCount = 0;
+                            vs.reverse = 0;
+                            vs.colorOrder = "RGB";
+                            vs.nullNodes = 0;
+                            vs.zigZag = 0;
+                            vs.brightness = 100;
+                            vs.gamma = "1.0";
+                        } else {
+                            vs.description = row.find('.vsDescription').val();
+                            vs.startChannel = parseInt(row.find('.vsStartChannel').val()) - 1;
+                            vs.pixelCount = parseInt(row.find('.vsPixelCount').val());
+                            vs.groupCount = parseInt(row.find('.vsGroupCount').val());
+                            vs.reverse = parseInt(row.find('.vsReverse').val());
+                            vs.colorOrder = row.find('.vsColorOrder').val();
+                            vs.nullNodes = parseInt(row.find('.vsNullNodes').val());
+                            vs.zigZag = parseInt(row.find('.vsZigZag').val());
+                            vs.brightness = parseInt(row.find('.vsBrightness').val());
+                            vs.gamma = row.find('.vsGamma').val();
+                        }
 
                         virtualStrings.push(vs);
                     }

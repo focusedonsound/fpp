@@ -27,8 +27,6 @@
 #include <sstream>
 #include <string>
 
-#include <boost/algorithm/string/replace.hpp>
-
 #include "common.h"
 #include "log.h"
 #include "PlaylistEntryBoth.h"
@@ -81,12 +79,18 @@ int PlaylistEntryDynamic::Init(Json::Value &config)
 	LogDebug(VB_PLAYLIST, "PlaylistEntryDynamic::Init()\n");
 
 	m_subType = config["subType"].asString();
-	m_data = config["data"].asString();
 
 	m_drainQueue = config["drainQueue"].asInt();
 
 	if (config.isMember("pluginHost"))
 		m_pluginHost = config["pluginHost"].asString();
+
+	if (m_subType == "file")
+		m_data = config["dataFile"].asString();
+	else if (m_subType == "plugin")
+		m_data = config["dataPlugin"].asString();
+	else if (m_subType == "url")
+		m_data = config["dataURL"].asString();
 
 	if ((m_subType == "plugin") || (m_subType == "url"))
 	{
@@ -352,7 +356,6 @@ int PlaylistEntryDynamic::ReadFromURL(std::string url)
 int PlaylistEntryDynamic::ReadFromString(std::string jsonStr)
 {
 	Json::Value root;
-	Json::Reader reader;
 	PlaylistEntryBase *playlistEntry = NULL;
 
 	LogDebug(VB_PLAYLIST, "ReadFromString(): String:\n%s\n", jsonStr.c_str());
@@ -363,8 +366,7 @@ int PlaylistEntryDynamic::ReadFromString(std::string jsonStr)
 		return 0;
 	}
 
-	bool success = reader.parse(jsonStr, root);
-	if (!success)
+	if (!LoadJsonFromString(jsonStr, root))
 	{
 		LogErr(VB_PLAYLIST, "Error parsing JSON: %s\n", jsonStr.c_str());
 		return 0;

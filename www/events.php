@@ -4,6 +4,8 @@
 <?php	include 'common.php'; ?>
 <?php	include 'common/menuHead.inc'; ?>
 <script>
+        allowMultisyncCommands = true;
+
 		var TriggerEventSelected = "";
 		var TriggerEventID = "";
 		$(function() {
@@ -205,14 +207,11 @@ function SaveControlChannels()
 		xmlhttp.send();
 	}
 
-function SetSpeakerIndicator(value) {
-}
-
 </script>
 
 <title><? echo $pageTitle; ?></title>
 </head>
-<body onLoad="GetFPPDmode();LoadCommandList('newEventCommand');StatusPopulatePlaylists();GetFPPStatus();">
+<body onLoad="LoadCommandList($('#newEventCommand'));">
 <div id="bodyWrapper">
 <?php
 	include 'menu.inc';
@@ -275,28 +274,6 @@ function SetSpeakerIndicator(value) {
 <br/>
 <div id="programControl" class="settings">
 	<fieldset>
-		<legend>Player Status</legend>
-		<div id="daemonControl">
-			<table width= "100%">
-				<tr>
-					<td class='controlHeader'> FPPD Mode: </td>
-					<td><div id='textFPPDmode'>Player Mode</div>
-				</tr>
-				<tr>
-					<td class='controlHeader'> FPPD Status: </td>
-					<td id = "daemonStatus"></td>
-				</tr>
-				<tr>
-					<td class='controlHeader'> FPP Time: </td>
-					<td id="fppTime"></td>
-				</tr>
-			</table>
-		</div>
-	</fieldset>
-
-	<br />
-
-	<fieldset>
 		<legend>Events</legend>
 		<table>
 			<tr><td colspan='5'>Event Control Channels: </td>
@@ -305,26 +282,30 @@ function SetSpeakerIndicator(value) {
 					<td width='20'></td>
 					<td>Minor:</td><td><? PrintSettingText("controlMinor", 1, 0, 6, 6); ?></td>
 					<td width='20'></td>
-					<td>Use Raw Event ID's in Control Channels (instead of 10x Event ID): <? PrintSettingCheckbox("Raw Event IDs", "RawEventIDs", 2, 0, "2", "1", "", ""); ?></td>
+					<td>Use legacy 10x multiplier for Event ID's in Control Channels: <? PrintSettingCheckbox("10x Event IDs", "RawEventIDs", 2, 0, "0", "1", "", ""); ?></td>
 					</tr>
 		</table>
 		<input type='Submit' value='Save' onClick='SaveControlChannels();'>
 		<br>
 		<br>
 		<div>
-			<div id="eventList" class="unselectable">
-				<table id="tblEventListHeader" width="100%">
-					<tr class="eventListHeader">
-						<td class='fppTableHeader eventTblID'>ID</td>
-						<td class='fppTableHeader eventTblName'>Name</td>
-						<td class='fppTableHeader eventTblCommand'>Command</td>
-						<td class='fppTableHeader eventTblArgs'>Arguments</td>
-					</tr>
-				</table>
-				<table id="tblEventEntries" width="100%">
-                    <? PrintEventRows(); ?>
-				 </table>
-			</div>
+            <div class='fppTableWrapper'>
+                <div class='fppTableContents fullWidth'>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class='eventTblID'>ID</th>
+                                <th class='eventTblName'>Name</th>
+                                <th class='eventTblCommand'>Command</th>
+                                <th class='eventTblArgs'>Arguments</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tblEventEntries" width="100%">
+<? PrintEventRows(); ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
 
 			<div id="eventControls" style="margin-top:5px">
 				<input id= "btnAddEvent" type="button" class ="buttons" value="Add Event" onClick="AddEvent();">

@@ -28,13 +28,13 @@
 #include "settings.h"
 #include "events.h"
 #include "effects.h"
+#include "overlays/PixelOverlay.h"
 #include "playlist/Playlist.h"
 
 #include <sstream>
 #include <string.h>
 #include <unistd.h>
 #include <vector>
-#include <jsoncpp/json/json.h>
 
 #include "commands/Commands.h"
 #include "common.h"
@@ -123,25 +123,42 @@ MosquittoClient::MosquittoClient(const std::string &host, const int port,
 	pthread_mutex_init(&m_mosqLock, NULL);
 
     std::function<void(const std::string &, const std::string &)> f = [] (const std::string &topic, const std::string &payload) {
-        std::string ntopic = topic.substr(13); //wrip off /set/command/
-        printf("topic: %s\n",  ntopic.c_str());
-        
-        std::vector<std::string> args = splitWithQuotes(ntopic, '/');
-        std::string command = args[0];
-        args.erase(args.begin());
-        bool foundp = false;
-        for (int x = 0; x < args.size(); x++) {
-            if (args[x] == "{Payload}") {
-                args[x] = payload;
-                foundp = true;
+        if (topic.size() <= 13) {
+            Json::Value val = LoadJsonFromString(payload);
+            CommandManager::INSTANCE.run(val);
+        } else {
+            std::vector<std::string> args;
+            std::string command;
+            
+            std::string ntopic = topic.substr(13); //wrip off /set/command/
+            args = splitWithQuotes(ntopic, '/');
+            command = args[0];
+            args.erase(args.begin());
+            bool foundp = false;
+            for (int x = 0; x < args.size(); x++) {
+                if (args[x] == "{Payload}") {
+                    args[x] = payload;
+                    foundp = true;
+                }
+            }
+            if (payload != "" && !foundp)  {
+                args.push_back(payload);
+            }
+            if (args.size() == 0 && payload != "") {
+                Json::Value val = LoadJsonFromString(payload);
+                CommandManager::INSTANCE.run(command, val);
+            } else {
+                CommandManager::INSTANCE.run(command, args);
             }
         }
-        if (payload != "" && !foundp)  {
-            args.push_back(payload);
-        }
-        CommandManager::INSTANCE.run(command, args);
     };
+    AddCallback("/set/command", f);
     AddCallback("/set/command/#", f);
+
+    std::function<void(const std::string &, const std::string &)> lf = [] (const std::string &topic, const std::string &payload) {
+        PixelOverlayManager::INSTANCE.LightMessageHandler(topic, payload);
+    };
+    AddCallback("/light/#", lf);
 }
 /*
  *
@@ -165,12 +182,24 @@ MosquittoClient::~MosquittoClient()
  */
 int MosquittoClient::Init(const std::string &username, const std::string &password, const std::string &ca_file)
 {
-	mosquitto_lib_init();
-    std::string host = getSetting("HostName");
-    if (host == "") {
-	    host = "FPP";
+    mosquitto_lib_init();
+    // Use supplied Client Id (If one)
+    std::string clientId = getSetting("MQTTClientId");
+    if (clientId == "") {
+	// If not, genereate one with random digits on end
+    	clientId = getSetting("HostName");
+    	if (clientId == "") {
+	    clientId = "FPP";
+    	}
+    	clientId.append("_");
+    	for (int i = 0; i < 4; i++) {
+	    int digit = rand() %10;
+            char digitc = '0' + digit;
+	    clientId.append(1,digitc);
+    	}
     }
-    m_mosq = mosquitto_new(host.c_str(), true, NULL);
+    LogInfo(VB_CONTROL, "Using MQTT client id of %s \n", clientId.c_str());
+    m_mosq = mosquitto_new(clientId.c_str(), true, NULL);
 	if (!m_mosq)
 	{
 		LogErr(VB_CONTROL, "Error, unable to create new Mosquitto instance.\n");
@@ -196,7 +225,7 @@ int MosquittoClient::Init(const std::string &username, const std::string &passwo
 	    LogInfo(VB_CONTROL, "No CA File specified for MQTT\n");
 	}
 
-	LogDebug(VB_CONTROL, "About to call MQTT Connect (%s, %d, %d)t\n", m_host.c_str(), m_port, m_keepalive);
+	LogDebug(VB_CONTROL, "About to call MQTT Connect (%s, %d, %d)\n", m_host.c_str(), m_port, m_keepalive);
 
 	int result = mosquitto_connect(m_mosq, m_host.c_str(), m_port, m_keepalive);
 
@@ -223,13 +252,13 @@ int MosquittoClient::Init(const std::string &username, const std::string &passwo
 /*
  *
  */
-int MosquittoClient::PublishRaw(const std::string &topic, const std::string &msg)
+int MosquittoClient::PublishRaw(const std::string &topic, const std::string &msg, const int qos, const bool retain)
 {
 	LogDebug(VB_CONTROL, "Publishing message '%s' on topic '%s'\n", msg.c_str(), topic.c_str());
 
 	pthread_mutex_lock(&m_mosqLock);
 
-	int result = mosquitto_publish(m_mosq, NULL, topic.c_str(), msg.size(), msg.c_str(), 1, 1);
+	int result = mosquitto_publish(m_mosq, NULL, topic.c_str(), msg.size(), msg.c_str(), qos, retain);
 
 	pthread_mutex_unlock(&m_mosqLock);
 
@@ -245,22 +274,22 @@ int MosquittoClient::PublishRaw(const std::string &topic, const std::string &msg
 /*
  *
  */
-int MosquittoClient::Publish(const std::string &subTopic, const std::string &msg)
+int MosquittoClient::Publish(const std::string &subTopic, const std::string &msg, const int qos, const bool retain)
 {
 	std::string topic = m_baseTopic + "/" + subTopic;
 
-	return PublishRaw(topic, msg);
+	return PublishRaw(topic, msg, qos, retain);
 }
 
 /*
  *
  */
-int MosquittoClient::Publish(const std::string &subTopic, const int value)
+int MosquittoClient::Publish(const std::string &subTopic, const int value, const int qos, const bool retain)
 {
 	std::string topic = m_baseTopic + "/" + subTopic;
 	std::string msg = std::to_string(value);
 
-	return PublishRaw(topic, msg);
+	return PublishRaw(topic, msg, qos, retain);
 }
 
 /*
@@ -324,6 +353,7 @@ void MosquittoClient::HandleConnect() {
 	m_isConnected = true;
 	std::vector<std::string> subscribe_topics;
     subscribe_topics.push_back(m_baseTopic + "/set/#");
+    subscribe_topics.push_back(m_baseTopic + "/light/#");
     subscribe_topics.push_back(m_baseTopic + "/event/#"); // Legacy
     subscribe_topics.push_back(m_baseTopic + "/effect/#"); // Legacy
 
@@ -479,3 +509,87 @@ void *RunMqttPublishThread(void *data) {
 		me->PublishStatus();
 	}
 }
+
+void MosquittoClient::AddHomeAssistantDiscoveryConfig(const std::string &component, const std::string &id, Json::Value &config)
+{
+    LogDebug(VB_CONTROL, "Adding Home Assistant discovery config for %s/%s\n", component.c_str(), id.c_str());
+    std::string cfgTopic = getSetting("MQTTHADiscoveryPrefix");
+
+    if (cfgTopic.empty())
+        cfgTopic = "homeassistant";
+
+    cfgTopic += "/";
+    cfgTopic += component;
+    cfgTopic += "/";
+    cfgTopic += getSetting("HostName");
+    cfgTopic += "/";
+    cfgTopic += id;
+    cfgTopic += "/config";
+
+    std::string cmdTopic = mqtt->GetBaseTopic();
+    cmdTopic += "/";
+    cmdTopic += component;
+    cmdTopic += "/";
+    cmdTopic += id;
+
+    std::string stateTopic = cmdTopic;
+    stateTopic += "/state";
+    cmdTopic += "/cmd";
+
+    if (getSettingInt("MQTTHADiscoveryAddHost", 0)) {
+        std::string name = getSetting("HostName");
+        name += "_";
+        name += id;
+        config["name"] = name;
+    } else {
+        config["name"] = id;
+    }
+
+    config["state_topic"] = stateTopic;
+    config["command_topic"] = cmdTopic;
+
+    Json::StreamWriterBuilder wbuilder;
+    wbuilder["indentation"] = "";
+    std::string configStr = Json::writeString(wbuilder, config);
+    //std::string configStr = SaveJsonToString(config);
+    PublishRaw(cfgTopic, configStr);
+
+    // Store a copy of this so we can detect when we remove models
+    cfgTopic = component;
+    cfgTopic += "/";
+    cfgTopic += id;
+    cfgTopic += "/config";
+    Publish(cfgTopic, configStr);
+}
+
+void MosquittoClient::RemoveHomeAssistantDiscoveryConfig(const std::string &component, const std::string &id)
+{
+    LogDebug(VB_CONTROL, "Removing Home Assistant discovery config for %s/%s\n", component.c_str(), id.c_str());
+    std::string cfgTopic = getSetting("MQTTHADiscoveryPrefix");
+    if (cfgTopic.empty())
+        cfgTopic = "homeassistant";
+
+    cfgTopic += "/";
+    cfgTopic += component;
+    cfgTopic += "/";
+    cfgTopic += getSetting("HostName");
+    cfgTopic += "/";
+    cfgTopic += id;
+    cfgTopic += "/config";
+
+    std::string emptyStr;
+    PublishRaw(cfgTopic, emptyStr);
+
+    // Clear our cache copy and any state message
+    cfgTopic = component;
+    cfgTopic += "/";
+    cfgTopic += id;
+
+    std::string stateTopic = cfgTopic;
+    stateTopic += "/state";
+    cfgTopic += "/config";
+
+    Publish(cfgTopic, emptyStr);
+    Publish(stateTopic, emptyStr);
+}
+

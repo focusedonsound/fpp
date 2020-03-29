@@ -7,7 +7,7 @@
 #include "PlaylistCommands.h"
 #include "EventCommands.h"
 #include "MediaCommands.h"
-#include "util/GPIOUtils.h"
+#include "MultiSync.h"
 
 CommandManager CommandManager::INSTANCE;
 Command::Command(const std::string &n) : name(n) {
@@ -57,29 +57,6 @@ Json::Value Command::getDescription() {
 CommandManager::CommandManager() {
 }
 
-class GPIOCommand : public Command {
-public:
-    GPIOCommand(std::vector<std::string> pins) : Command("GPIO") {
-        args.push_back(CommandArg("pin", "string", "Pin").setContentList(pins));
-        args.push_back(CommandArg("on", "bool", "On"));
-    }
-    virtual ~GPIOCommand() {
-    }
-    virtual std::unique_ptr<Command::Result> run(const std::vector<std::string> &args) override {
-        if (args.size() != 2) {
-            return std::make_unique<Command::ErrorResult>("Invalid number of arguments. GPIO needs two arguments.");
-        }
-        std::string n = args[0];
-        std::string v = args[1];
-        const PinCapabilities &p = PinCapabilities::getPinByName(n);
-        if (p.ptr()) {
-            p.configPin();
-            p.setValue(v == "true" || v == "1");
-            std::make_unique<Command::Result>("OK");
-        }
-        return std::make_unique<Command::ErrorResult>("No Pin Named " + n);
-    }
-};
 
 void CommandManager::Init() {
     addCommand(new StopPlaylistCommand());
@@ -110,20 +87,13 @@ void CommandManager::Init() {
     addCommand(new StopRemoteEffectCommand());
     addCommand(new RunRemoteScriptEvent());
     addCommand(new StartRemoteFSEQEffectCommand());
-    
-    std::vector<std::string> pins = PinCapabilities::getPinNames();
-    if (!pins.empty()) {
-        addCommand(new GPIOCommand(pins));
-    }
 }
 CommandManager::~CommandManager() {
     Cleanup();
 }
 void CommandManager::Cleanup() {
     for (auto &a : commands) {
-        if (a.second->name != "GPIO") {
-            delete a.second;
-        }
+        delete a.second;
     }
     commands.clear();
 }
@@ -138,7 +108,9 @@ void CommandManager::removeCommand(Command *cmd) {
 Json::Value CommandManager::getDescriptions() {
     Json::Value  ret;
     for (auto &a : commands) {
-        ret.append(a.second->getDescription());
+        if (!a.second->hidden()) {
+            ret.append(a.second->getDescription());
+        }
     }
     return ret;
 }
@@ -170,15 +142,43 @@ std::unique_ptr<Command::Result> CommandManager::runRemoteCommand(const std::str
     uargs.push_back(url);
     uargs.push_back("POST");
     
-    Json::FastWriter fastWriter;
-    std::string config = fastWriter.write(j);
+    std::string config = SaveJsonToString(j);
     
     uargs.push_back(config);
     return run("URL", uargs);
 }
 
+std::unique_ptr<Command::Result> CommandManager::run(const std::string &command, const Json::Value &argsArray) {
+    auto f = commands.find(command);
+    if (f != commands.end()) {
+        LogDebug(VB_COMMAND, "Running command \"%s\"\n", command.c_str());
+        std::vector<std::string> args;
+        for (int x = 0; x < argsArray.size(); x++) {
+            args.push_back(argsArray[x].asString());
+        }
+        return f->second->run(args);
+    }
+    LogWarn(VB_COMMAND, "No command found for \"%s\"\n", command.c_str());
+    return std::make_unique<Command::ErrorResult>("No Command: " + command);
+}
+std::unique_ptr<Command::Result> CommandManager::run(const Json::Value &cmd) {
+    std::string command = cmd["command"].asString();
+    if (cmd.isMember("multisyncCommand")) {
+        bool multisync = cmd["multisyncCommand"].asBool();
+        if (multisync) {
+            std::string hosts = cmd.isMember("multisyncHosts") ? cmd["multisyncHosts"].asString() : "";
+            std::vector<std::string> args;
+            for (int x = 0; x < cmd["args"].size(); x++) {
+                args.push_back(cmd["args"][x].asString());
+            }
+            MultiSync::INSTANCE.SendFPPCommandPacket(hosts, command, args);
+        }
+    }
+    return run(command, cmd["args"]);
+}
 
-const httpserver::http_response CommandManager::render_GET(const httpserver::http_request &req) {
+
+const std::shared_ptr<httpserver::http_response> CommandManager::render_GET(const httpserver::http_request &req) {
     int plen = req.get_path_pieces().size();
     std::string p1 = req.get_path_pieces()[0];
     if (p1 == "commands") {
@@ -187,15 +187,13 @@ const httpserver::http_response CommandManager::render_GET(const httpserver::htt
             auto f = commands.find(command);
             if (f != commands.end()) {
                 Json::Value result = f->second->getDescription();
-                Json::StyledWriter fastWriter;
-                std::string resultStr = fastWriter.write(result);
-                return httpserver::http_response_builder(resultStr, 200, "application/json").string_response();
+                std::string resultStr = SaveJsonToString(result, "  ");
+                return std::shared_ptr<httpserver::http_response>(new httpserver::string_response(resultStr, 200, "application/json"));
             }
         } else {
             Json::Value result = getDescriptions();
-            Json::StyledWriter fastWriter;
-            std::string resultStr = fastWriter.write(result);
-            return httpserver::http_response_builder(resultStr, 200, "application/json").string_response();
+            std::string resultStr = SaveJsonToString(result, "  ");
+            return std::shared_ptr<httpserver::http_response>(new httpserver::string_response(resultStr, 200, "application/json"));
         }
     } else if (p1 == "command" && plen > 1) {
         std::string command = req.get_path_pieces()[1];
@@ -214,31 +212,49 @@ const httpserver::http_response CommandManager::render_GET(const httpserver::htt
             }
             if (r->isDone()) {
                 if (r->isError()) {
-                    return httpserver::http_response_builder(r->get(), 500, "text/plain");
+                    return std::shared_ptr<httpserver::http_response>(new httpserver::string_response(r->get(), 500, "text/plain"));
                 }
-                return httpserver::http_response_builder(r->get(), 200, "text/plain");
+                return std::shared_ptr<httpserver::http_response>(new httpserver::string_response(r->get(), 200, "text/plain"));
             } else {
-                return httpserver::http_response_builder("Timeout running command", 500, "text/plain");
+                return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Timeout running command", 500, "text/plain"));
             }
         }
-        return httpserver::http_response_builder("Not Found", 404, "text/plain");
+        return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Not Found", 404, "text/plain"));
     }
-    return httpserver::http_response_builder("Not Found", 404, "text/plain").string_response();
+    return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Not Found", 404, "text/plain"));
 }
 
-const httpserver::http_response CommandManager::render_POST(const httpserver::http_request &req) {
+const std::shared_ptr<httpserver::http_response> CommandManager::render_POST(const httpserver::http_request &req) {
     std::string p1 = req.get_path_pieces()[0];
     if (p1 == "command") {
-        std::string command = req.get_path_pieces()[1];
-        Json::Value val = JSONStringToObject(req.get_content());
-        std::vector<std::string> args;
-        for (int x = 0; x < val.size(); x++) {
-            args.push_back(val[x].asString());
-        }
-        auto f = commands.find(command);
-        if (f != commands.end()) {
-            LogDebug(VB_COMMAND, "Running command \"%s\"\n", command.c_str());
-            std::unique_ptr<Command::Result> r = f->second->run(args);
+        if (req.get_path_pieces().size() > 1) {
+            std::string command = req.get_path_pieces()[1];
+            Json::Value val = LoadJsonFromString(req.get_content());
+            std::vector<std::string> args;
+            for (int x = 0; x < val.size(); x++) {
+                args.push_back(val[x].asString());
+            }
+            auto f = commands.find(command);
+            if (f != commands.end()) {
+                LogDebug(VB_COMMAND, "Running command \"%s\"\n", command.c_str());
+                std::unique_ptr<Command::Result> r = f->second->run(args);
+                int count = 0;
+                while (!r->isDone() && count < 1000) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                    count++;
+                }
+                if (r->isDone()) {
+                    if (r->isError()) {
+                        return std::shared_ptr<httpserver::http_response>(new httpserver::string_response(r->get(), 500, r->contentType()));
+                    }
+                    return std::shared_ptr<httpserver::http_response>(new httpserver::string_response(r->get(), 200, r->contentType()));
+                } else {
+                    return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Timeout running command", 500, "text/plain"));
+                }
+            }
+        } else {
+            Json::Value val = LoadJsonFromString(req.get_content());
+            std::unique_ptr<Command::Result> r = run(val);
             int count = 0;
             while (!r->isDone() && count < 1000) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -246,15 +262,15 @@ const httpserver::http_response CommandManager::render_POST(const httpserver::ht
             }
             if (r->isDone()) {
                 if (r->isError()) {
-                    return httpserver::http_response_builder(r->get(), 500, r->contentType());
+                    return std::shared_ptr<httpserver::http_response>(new httpserver::string_response(r->get(), 500, r->contentType()));
                 }
-                return httpserver::http_response_builder(r->get(), 200, r->contentType());
+                return std::shared_ptr<httpserver::http_response>(new httpserver::string_response(r->get(), 200, r->contentType()));
             } else {
-                return httpserver::http_response_builder("Timeout running command", 500, "text/plain");
+                return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Timeout running command", 500, "text/plain"));
             }
         }
-        return httpserver::http_response_builder("Not Found", 404, "text/plain");
+        return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Not Found", 404, "text/plain"));
     }
-    return httpserver::http_response_builder("Not Found", 404, "text/plain").string_response();
+    return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Not Found", 404, "text/plain"));
     
 }

@@ -93,23 +93,40 @@ class OtherBaseDevice extends OtherBase {
 
 /////////////////////////////////////////////////////////////////////////////
 // Misc. Support functions
-function CreateSelect(optionArray = ["No Options"], currentValue, selectTitle, dropDownTitle, selectClass) {
-	var result = selectTitle+": <select class='"+selectClass+"'>";
+function CreateSelect(optionArray = ["No Options"], currentValue, selectTitle, dropDownTitle, selectClass, onselect = "") {
+	var result = selectTitle+": <select class='"+selectClass+"'";
+    if (onselect != "") {
+        result += " onchange='" + onselect + "'";
+    }
+    result += ">";
 
-	if (currentValue == "")
+	if (currentValue === "")
 		result += "<option value=''>"+dropDownTitle+"</option>";
 
 	var found = 0;
-	for (var key in optionArray) {
-		result += "<option value='" + key + "'";
-	
-		if (currentValue == key) {
-			result += " selected";
-			found = 1;
-		}
+    if (optionArray instanceof Map) {
+        optionArray.forEach((key, value) => {
+                                result += "<option value='" + value + "'";
+                            
+                                if (currentValue == value) {
+                                    result += " selected";
+                                    found = 1;
+                                }
 
-		result += ">" + optionArray[key] + "</option>";
-	}
+                                result += ">" + key + "</option>";
+                            });
+    } else {
+        for (var key in optionArray) {
+            result += "<option value='" + key + "'";
+        
+            if (currentValue == key) {
+                result += " selected";
+                found = 1;
+            }
+
+            result += ">" + optionArray[key] + "</option>";
+        }
+    }
 
 	if ((currentValue != '') &&
 		(found == 0)) {
@@ -234,7 +251,12 @@ class I2COutput extends OtherBaseDevice {
         var addr = cell.find("select.addr").val();
         result.deviceID = parseInt(addr);
         return result;
-    }        
+    }
+    
+    CanAddNewOutput() {
+        //almost all i2c devices allow setting addresses so multiple can exist
+        return true;
+    }
 }
 
 class PCA9685Output extends I2COutput {
@@ -243,30 +265,44 @@ class PCA9685Output extends I2COutput {
     }
     PopulateHTMLRow(config) {
         var result = super.PopulateHTMLRow(config);
-        var datatypes = ["8 Bit Scaled", "16 Bit Scaled", "8 Bit Absolute", "16 Bit Absolute"];
-        
+        var datatypes = ["8 Bit Scaled", "8 Bit Scaled Reversed", "16 Bit Scaled", "16 Bit Scaled Reversed", "8 Bit Absolute", "16 Bit Absolute"];
+        var zeroBehaviorTypes = ["Hold", "Normal", "To Center", "Stop PWM"];
+
         var inMicrosecs = config.asUsec;
         if (inMicrosecs == undefined) {
-            inMicrosecs = false;
+            inMicrosecs = true;
         }
         result += " Frequency (Hz): <input class='frequency' type='number' min='40' max='1600' value='" + config.frequency + "'/><br><input class='asUsec' type='checkbox' " + (inMicrosecs ? "checked" : "") + ">Min/Max in micro-seconds</input><br>";
         
+        result += "<table>";
         for (var x = 0; x < 16; x++) {
-            var min = 0;
-            var max = 4095;
+            var min = 1000;
+            var max = 2000;
+            var center = 1500;
             var dataType = 0;
+            var zeroBehavior = 0;
             
             if (config.ports != undefined && config.ports[x] != undefined) {
                 min = config.ports[x].min;
                 max = config.ports[x].max;
+                if (config.ports[x].center != undefined) {
+                    center = config.ports[x].center;
+                }
+                if (config.ports[x].zeroBehavior != undefined) {
+                    zeroBehavior = config.ports[x].zeroBehavior;
+                }
                 dataType = config.ports[x].dataType;
             }
             
-            result += "<br>Port: " + x + " - ";
-            result += "Min Value: <input class='min" + x + "' type='number' min='0' max='4095' value='" + min + "'/>";
-            result += " Max Value: <input class='max" + x + "' type='number' min='0' max='4095' value='" + max + "'/> ";
-            result += CreateSelect(datatypes, dataType, "Data Type", "Select Data Type", "dataType" + x);
+            result += "<tr style='outline: thin solid;'><td style='vertical-align:top'>Port " + x + ": </td><td>";
+            result += "Min&nbsp;Value:<input class='min" + x + "' type='number' min='0' max='4095' style='width: 6em' value='" + min + "'/>";
+            result += "&nbsp;Center&nbsp;Value:<input class='center" + x + "' type='number' min='0' max='4095' style='width: 6em' value='" + center + "'/>";
+            result += "&nbsp;Max&nbsp;Value:<input class='max" + x + "' type='number' min='0' max='4095' style='width: 6em' value='" + max + "'/><br>";
+            result += CreateSelect(datatypes, dataType, "Data Type", "Select Data Type", "dataType" + x) + "&nbsp;";
+            result += CreateSelect(zeroBehaviorTypes, zeroBehavior, "Zero Behavior", "Select Zero Behavior", "zeroBehavior" + x);
+            result += "</td></tr>"
         }
+        result += "</table>";
 
         return result;
     }
@@ -277,10 +313,13 @@ class PCA9685Output extends I2COutput {
         result.ports = [];
         for (var x = 0; x < 16; x++) {
             var dt = cell.find("select.dataType" + x).val();
+            var zt = cell.find("select.zeroBehavior" + x).val();
             result.ports[x] = {};
             result.ports[x].dataType = parseInt(dt);
+            result.ports[x].zeroBehavior = parseInt(zt);
             result.ports[x].min = parseInt(cell.find("input.min" + x).val());
             result.ports[x].max = parseInt(cell.find("input.max" + x).val());
+            result.ports[x].center = parseInt(cell.find("input.center" + x).val());
         }
 
         
@@ -293,7 +332,7 @@ class PCA9685Output extends I2COutput {
 // Generic SPI Output
 class GenericSPIDevice extends OtherBaseDevice {
     
-    constructor(name="GenericSPI", friendlyName="Generic SPI", maxChannels=1048576, fixedChans=false, devices=SPIDevices, config={speed: 50}) {
+    constructor(name="GenericSPI", friendlyName="Generic SPI", maxChannels=FPPD_MAX_CHANNELS, fixedChans=false, devices=SPIDevices, config={speed: 50}) {
         super(name, friendlyName, maxChannels, fixedChans, devices, config);
     }
 
@@ -320,7 +359,7 @@ class GenericSPIDevice extends OtherBaseDevice {
 // Generic UDP Output
 class GenericUDPDevice extends OtherBase {
     
-    constructor(name="GenericUDP", friendlyName="Generic UDP", maxChannels=300, fixedChans=false, config={address: "", port:8080, tokens:""}) {
+    constructor(name="GenericUDP", friendlyName="Generic UDP", maxChannels=1400, fixedChans=false, config={address: "", port:8080, tokens:""}) {
         super(name, friendlyName, maxChannels, fixedChans, config);
     }
 
@@ -342,7 +381,119 @@ class GenericUDPDevice extends OtherBase {
 
         return result;
     }
+}
 
+/////////////////////////////////////////////////////////////////////////////
+// GPIO Output
+
+var GPIOPins = new Map();
+var PWMPins = new Array();
+<?
+$data = file_get_contents('http://127.0.0.1:32322/gpio');
+$gpiojson = json_decode($data, true);
+foreach($gpiojson as $gpio) {
+    $pn = $gpio['pin'] . ' (GPIO: ' . $gpio['gpio'] . ')';
+    echo "GPIOPins.set(" . $gpio['gpio'] . ", '" . $pn . "');\n";
+    if (isset($gpio['pwm'])) {
+        echo "PWMPins['". $gpio['gpio'] . "'] = true;\n";
+    }
+}
+?>
+
+function GPIOHeaderPinChanged(item) {
+    var gpio = item.value;
+    var row = item.closest('tr');
+    if (PWMPins[gpio] != true) {
+        $(row).find("span.pwm-span").hide();
+        $(row).find("input.pwm").prop('checked', false);
+    } else {
+        $(row).find("span.pwm-span").show();
+    }
+}
+
+class GPIOOutputDevice extends OtherBase {
+    constructor(name="GPIO", friendlyName="GPIO", maxChannels=1, fixedChans=true, config={}) {
+        super(name, friendlyName, maxChannels, fixedChans, config);
+    }
+
+    PopulateHTMLRow(config) {
+        var result = super.PopulateHTMLRow(config);
+        var gpio = GPIOPins[0];
+        var pwm = 0;
+        var inverted = 0;
+        if (config.gpio != undefined) {
+            gpio = config.gpio;
+        }
+        if (config.pwm != undefined) {
+            pwm = config.pwm;
+        } else if (config.softPWM != undefined) {
+            pwm = config.softPWM;
+        }
+        if (config.invert != undefined) {
+            inverted = config.invert;
+        }
+        result += CreateSelect(GPIOPins, gpio, "GPIO", "", "gpio", "GPIOHeaderPinChanged(this)");
+        result += "\n";
+        result += " Inverted: <input type=checkbox class='inverted'";
+        if (inverted)
+            result += " checked='checked'";
+        result += ">\n";
+        result += "<span class='pwm-span' ";
+        if (PWMPins[gpio] != true) {
+            result += " style='display: none;'";
+        }
+        result += ">PWM: <input type='checkbox' class='pwm'";
+        if (pwm)
+            result += " checked='checked'";
+        result += "></span>\n";
+        return result;
+    }
+
+    GetOutputConfig(result, cell) {
+        result = super.GetOutputConfig(result, cell);
+        var gpio = cell.find("select.gpio").val();
+        result.gpio = parseInt(gpio);
+        result.invert = cell.find("input.inverted").is(":checked") ? 1 : 0;
+        result.pwm =  cell.find("input.pwm").is(":checked") ? 1 : 0;
+        return result;
+    }
+}
+
+class GPIO595OutputDevice extends OtherBase {
+    constructor(name="GPIO-595", friendlyName="GPIO-595", maxChannels=128, fixedChans=false, config={}) {
+        super(name, friendlyName, maxChannels, fixedChans, config);
+    }
+
+    PopulateHTMLRow(config) {
+        var result = super.PopulateHTMLRow(config);
+        var clock = GPIOPins[0];
+        var data = GPIOPins[0];
+        var latch = GPIOPins[0];
+        if (config.clockPin != undefined) {
+            clock = config.clockPin;
+        }
+        if (config.dataPin != undefined) {
+            data = config.dataPin;
+        }
+        if (config.latchPin != undefined) {
+            latch = config.latchPin;
+        }
+
+        result += CreateSelect(GPIOPins, clock, "Clock", "", "clock", "");
+        result += "&nbsp;";
+        result += CreateSelect(GPIOPins, data, "Data", "", "data", "");
+        result += "&nbsp;";
+        result += CreateSelect(GPIOPins, latch, "Latch", "", "latch", "");
+        return result;
+    }
+
+    GetOutputConfig(result, cell) {
+        result = super.GetOutputConfig(result, cell);
+        result.clockPin = parseInt(cell.find("select.clock").val());
+        result.dataPin = parseInt(cell.find("select.data").val());
+        result.latchPin = parseInt(cell.find("select.latch").val());
+        return result;
+    }
 }
 
 
@@ -351,6 +502,12 @@ class GenericUDPDevice extends OtherBase {
 var output_modules = [];
 
 //Outputs for all platforms
+
+if (GPIOPins.size > 0) {
+    output_modules.push(new GPIOOutputDevice());
+    output_modules.push(new GPIO595OutputDevice());
+}
+
 
 //Outputs for Raspberry Pi or Beagle
 <?

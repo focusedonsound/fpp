@@ -1,10 +1,3 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <?php require_once 'common/menuHead.inc'; ?>
-    <title><? echo $pageTitle; ?></title>
-    <!--    <script>var helpPage = "help/backup.php";</script>-->
-<script>
 <?php
 $skipJSsettings = 1;
 //error_reporting(E_ALL);
@@ -12,6 +5,7 @@ $skipJSsettings = 1;
 
 //Include other scripts
 require_once('common.php');
+require_once('common/settings.php');
 //Includes for API access
 //require_once('fppjson.php');
 require_once('fppxml.php');
@@ -774,28 +768,14 @@ function process_restore_data($restore_area, $restore_area_data)
                             //Do special things that require some sort of system change
                             //eg. changing piRTC via GUI will fire off a shell command to set it up
                             //we'll also do this to keep consistency
-                            if ($setting_name == 'piRTC') {
-                                SetPiRTC($setting_value);
-                            } else if ($setting_name == "PI_LCD_Enabled") {
-                                //DO a weird work around and set our request params and then call
-                                //the function to enable the LCD
-                                if ($setting_value == 1) {
-                                    $_GET['enabled'] = "true";
-                                } else {
-                                    $_GET['enabled'] = "false";
-                                }
-                                SetPiLCDenabled();
-                            } else if ($setting_name == "AudioOutput") {
+                            if ($setting_name == "AudioOutput") {
                                 $args['value'] = $setting_value;
                                 SetAudioOutput($setting_value);
                             } else if ($setting_name == "volume") {
                                 $_GET['volume'] = trim($setting_value);
                                 SetVolume();
-                            } else if ($setting_name == "ntpServer") {
-                                SetNtpServer($setting_value);
-                                NtpServiceRestart();//Restart NTP client so changes take effect
-                            } else if ($setting_name == "NTP") {
-                                SetNtpState($setting_value);
+                            } else {
+                                ApplySetting($setting_name, $setting_value);
                             }
                         }
 
@@ -995,56 +975,6 @@ function RestoreScripts($file_names)
             exec("$SUDO $fppDir/scripts/restoreScript $filename");
         }
     }
-}
-
-/**
- * Sets the timezone (taken from timeconfig.php)
- * @param $timezone_setting String Timezone in correct format
- * @see https://en.wikipedia.org/wiki/List_of_tz_database_time_zones For a list of timezones
- */
-function SetTimezone($timezone_setting)
-{
-    global $SUDO, $mediaDirectory;
-    //TODO: Check timezone for validity
-    $timezone = $timezone_setting;
-    error_log("RESTORE: Changing timezone to '" . $timezone . "'.");
-	if (file_exists("/.dockerenv")) {
-		exec($SUDO . " ln -s -f /usr/share/zoneinfo/$timezone /etc/localtime", $output, $return_val);
-		unset($output);
-
-		exec($SUDO . " bash -c \"echo $timezone > /etc/timezone\"", $output, $return_val);
-		unset($output);
-		//TODO: check return
-		exec($SUDO . " dpkg-reconfigure -f noninteractive tzdata", $output, $return_val);
-		unset($output);
-	} else if (file_exists('/usr/bin/timedatectl')) {
-		exec($SUDO . " timedatectl set-timezone $timezone", $output, $return_val);
-		unset($output);
-	} else {
-		exec($SUDO . " bash -c \"echo $timezone > /etc/timezone\"", $output, $return_val);
-		unset($output);
-		//TODO: check return
-		exec($SUDO . " dpkg-reconfigure -f noninteractive tzdata", $output, $return_val);
-		unset($output);
-		//TODO: check return
-	}
-	exec(" bash -c \"echo $timezone > $mediaDirectory/timezone\"", $output, $return_val);
-	unset($output);
-	//TODO: check return
-}
-
-/**
- * Sets the PiRTC setting exec's the appropriate command (taken from timeconfig.php)
- * @param $pi_rtc_setting String PIRTC setting
- */
-function SetPiRTC($pi_rtc_setting)
-{
-    global $SUDO, $fppDir;
-
-    $piRTC = $pi_rtc_setting;
-    WriteSettingToFile("piRTC", $piRTC);
-    exec($SUDO . " $fppDir/scripts/piRTC set");
-    error_log("RESTORE: Set RTC: " . $piRTC);
 }
 
 /**
@@ -1367,33 +1297,27 @@ function is_array_empty($InputVariable)
 //Move backup files
 moveBackupFiles_ToBackupDirectory();
     
-    
-    
-function PrintUSBDeviceSelect() {
-    global $SUDO;
-
-    echo "<select name='USBDevice' id='USBDevice'>\n";
-    foreach(scandir("/dev/") as $fileName) {
-        if (preg_match("/^sd[a-z][0-9]/", $fileName)) {
-            exec($SUDO . " sfdisk -s /dev/$fileName", $output, $return_val);
-            $GB = intval($output[0]) / 1024.0 / 1024.0;
-            unset($output);
-
-            if ($GB <= 0.1)
-                continue;
-
-            $key = sprintf( "%s - %.1fGB", $fileName, $GB);
-
-            echo "<option value='" . $fileName . "'>" . $key . "</option>\n";
-        }
-    }
-    echo "</select>";
-
-}
-
 ?>
+<!DOCTYPE html>
+<html>
+<head>
+    <?php require_once 'common/menuHead.inc'; ?>
+    <title>FPP - <? echo gethostname(); ?></title>
+    <!--    <script>var helpPage = "help/backup.php";</script>-->
+<script>
 </script>
 
+<?
+$backupHosts = Array();
+$data = file_get_contents('http://localhost/api/remotes');
+$arr = json_decode($data, true);
+
+foreach ($arr as $host => $desc) {
+    $backupHosts[$desc] = $host;
+}
+ksort($backupHosts);
+
+?>
     <script type="text/javascript">
         var settings = new Array();
         <?
@@ -1402,7 +1326,15 @@ function PrintUSBDeviceSelect() {
 		$settings['rebootFlag'] = ReadSettingFromFile('rebootFlag');
 
         foreach ($settings as $key => $value) {
-            printf("	settings['%s'] = \"%s\";\n", $key, $value);
+            if (!is_array($value)) {
+                if (preg_match('/\n/', $value))
+                    continue;
+
+                printf("	settings['%s'] = \"%s\";\n", $key, $value);
+            } else {
+                $js_array = json_encode($value);
+                printf("    settings['%s'] = %s;\n", $key, $js_array);
+            }
         }
 
         ?>
@@ -1418,10 +1350,9 @@ function PrintUSBDeviceSelect() {
             helpPage = "help/" + helpPage;
         }
 
-function GetUSBFlags() {
+function GetCopyFlags() {
     var flags = "";
     
-    var cfTable = $('#CopyFlagsTable');
     if (document.getElementById("backup.Configuration").checked) {
         flags += " Configuration";
     }
@@ -1456,51 +1387,151 @@ function GetUSBFlags() {
         (direction = document.getElementById("backup.Direction").value == 'TOUSB')) {
         flags += " Backups";
     }
+
+    if (flags.length)
+        flags = flags.substring(1);
+
     return flags;
 }
+
 function PerformCopy() {
-    var dev = document.getElementById("USBDevice").value;
+    var dev = document.getElementById("backup.USBDevice").value;
     var path = document.getElementById("backup.Path").value;
+    var pathSelect = document.getElementById("backup.PathSelect").value;
     var host = document.getElementById("backup.Host").value;
     var direction = document.getElementById("backup.Direction").value;
+    var flags = GetCopyFlags();
 
     var url = "copystorage.php?direction=" + direction;
 
     if ((direction == 'TOUSB') ||
         (direction == 'FROMUSB')) {
-        url += '&storageLocation=' + document.getElementById("USBDevice").value;
+        storageLocation = document.getElementById("backup.USBDevice").value;
     } else if ((direction == 'TOREMOTE') ||
                (direction == 'FROMREMOTE')) {
-        url += '&storageLocation=' + document.getElementById("backup.Host").value;
+        if (host == '') {
+            DialogError('Copy Failed', 'No host specified');
+            return;
+        }
+
+        storageLocation = host;
     } else {
-        url += '&storageLocation=/home/fpp/media/backups';
+        storageLocation = "/home/fpp/media/backups";
     }
 
-    if (direction == 'FROMLOCAL') {
-        url += '&path=' + document.getElementById("backup.PathSelect").value;
+    if (direction.substring(0,4) == 'FROM') {
+        if (pathSelect == '') {
+            DialogError('Copy Failed', 'No path specified');
+            return;
+        }
+
+        url += '&path=' + pathSelect;
     } else {
-        url += '&path=' + document.getElementById("backup.Path").value;
+        if (path == '') {
+            DialogError('Copy Failed', 'No path specified');
+            return;
+        }
+
+        url += '&path=' + path;
     }
 
-    url += '&flags=' + GetUSBFlags();
+    url += '&storageLocation=' + storageLocation;
+    url += '&flags=' + flags;
+
+    var warningMsg = "Confirm File restore of '" + flags + "' from " + storageLocation + "?\n\nWARNING: This will overwrite any current files with the copies being restored";
+
+    if (document.getElementById("backup.DeleteExtra").checked) {
+        url += '&delete=yes';
+        warningMsg += " and delete any local files which do not exist in the backup.";
+    } else {
+        url += '&delete=no';
+    }
+
+    if (direction.substring(0,4) == 'FROM')
+    {
+        if (!confirm(warningMsg)) {
+            $.jGrowl("Restore canceled.");
+            return;
+        }
+    }
+
 
     window.location.href = url;
+}
+
+function GetBackupDevices() {
+    $('#backup\\.USBDevice').html('<option>Loading...</option>');
+    $.get("/api/backups/devices"
+        ).done(function(data) {
+            var options = "";
+            for (var i = 0; i < data.length; i++) {
+                var desc = data[i].name;
+                if (data[i].vendor != '')
+                    desc += ' - ' + data[i].vendor;
+
+                if (data[i].model != '') {
+                    if (data[i].vendor != '')
+                        desc += ' ';
+                    else
+                        desc += ' - ';
+                    
+                    desc += data[i].model;
+                }
+
+                desc += ' - ' + data[i].size + 'GB';
+                options += "<option value='" + data[i].name + "'>" + desc + "</option>";
+            }
+            $('#backup\\.USBDevice').html(options);
+
+            if ((options != "") &&
+                (document.getElementById("backup.Direction").value == 'FROMUSB'))
+                GetBackupDeviceDirectories();
+        }).fail(function() {
+            $('#backup\\.USBDevice').html('');
+        });
+}
+
+function GetBackupDeviceDirectories() {
+    var dev = document.getElementById("backup.USBDevice").value;
+
+    if (dev == '') {
+        $('#backup\\.PathSelect').html("<option value=''>No USB Device Selected</option>");
+        return;
+    }
+
+    $('#backup\\.PathSelect').html('<option>Loading...</option>');
+    $.get("/api/backups/list/" + dev
+        ).done(function(data) {
+            PopulateBackupDirs(data);
+        }).fail(function() {
+            $('#backup\\.PathSelect').html('');
+        });
+}
+
+function USBDeviceChanged() {
+    var direction = document.getElementById("backup.Direction").value;
+    if (direction == 'FROMUSB')
+        GetBackupDeviceDirectories();
 }
 
 function PopulateBackupDirs(data) {
     var options = "";
     for (var i = 0; i < data.length; i++) {
-        options += "<option value='" + data[i] + "'>" + data[i] + "</option>";
+        if (data[i].substring(0,5) != 'ERROR')
+            options += "<option value='" + data[i] + "'>" + data[i] + "</option>";
+        else
+            options += "<option value=''>" + data[i] + "</option>";
     }
     $('#backup\\.PathSelect').html(options);
 }
 
 function GetBackupDirsViaAPI(host) {
+    $('#backup\\.PathSelect').html('<option>Loading...</option>');
     $.get("http://" + host + "/api/backups/list"
         ).done(function(data) {
             PopulateBackupDirs(data);
         }).fail(function() {
-            $('#backup.copyPathSelect').html('');
+            $('#backup\\.PathSelect').html('');
         });
 }
 
@@ -1521,10 +1552,11 @@ function BackupDirectionChanged() {
             break;
         case 'FROMUSB':
             $('.copyUSB').show();
-            $('.copyPath').show();
-            $('.copyPathSelect').hide();
+            $('.copyPath').hide();
+            $('.copyPathSelect').show();
             $('.copyHost').hide();
             $('.copyBackups').hide();
+            GetBackupDeviceDirectories();
             break;
         case 'TOLOCAL':
             $('.copyUSB').hide();
@@ -1559,6 +1591,7 @@ function BackupDirectionChanged() {
     }
 }
 
+GetBackupDevices();
     </script>
 </head>
 <body>
@@ -1746,15 +1779,15 @@ function BackupDirectionChanged() {
                         Copy configuration, sequences, etc... to/from a backup device.
                         <table>
 <tr><td>Copy Type:</td><td><select id="backup.Direction" onChange='BackupDirectionChanged();'>
-<option value="TOUSB" selected>Copy To USB</option>
-<option value="FROMUSB">Copy From USB</option>
-<option value="TOLOCAL">Copy To Local FPP Backups Directory</option>
-<option value="FROMLOCAL">Copy From Local FPP Backups Directory</option>
-<option value="TOREMOTE">Copy To Remote FPP Backups Directory</option>
-<option value="FROMREMOTE">Copy From Remote FPP Backups Directory</option>
+<option value="TOUSB" selected>Backup To USB</option>
+<option value="FROMUSB">Restore From USB</option>
+<option value="TOLOCAL">Backup To Local FPP Backups Directory</option>
+<option value="FROMLOCAL">Restore From Local FPP Backups Directory</option>
+<option value="TOREMOTE">Backup To Remote FPP Backups Directory</option>
+<option value="FROMREMOTE">Restore From Remote FPP Backups Directory</option>
 </select></td></tr>
-<tr class='copyUSB'><td>USB Device:</td><td><? PrintUSBDeviceSelect(); ?></td></tr>
-<tr class='copyHost'><td>Hostname/IP:</td><td><? PrintSettingTextSaved('backup.Host', 0, 0, 32, 32, '', '127.0.0.1', 'GetBackupHostBackupDirs'); ?></td></tr>
+<tr class='copyUSB'><td>USB Device:</td><td><select name='backup.USBDevice' id='backup.USBDevice' onChange='USBDeviceChanged();'></select> <input type='button' class='buttons' onClick='GetBackupDevices();' value='Refresh List'></td></tr>
+<tr class='copyHost'><td>Remote Host:</td><td><? PrintSettingSelect('Backup Host', 'backup.Host', 0, 0, '', $backupHosts, '', 'GetBackupHostBackupDirs'); ?></td></tr>
 <tr class='copyPath'><td>Backup Path:</td><td><? PrintSettingTextSaved('backup.Path', 0, 0, 128, 64, '', gethostname()); ?></td></tr>
 <tr class='copyPathSelect'><td>Backup Path:</td><td><select name='backup.PathSelect' id='backup.PathSelect'></select></td></tr>
 <tr><td>What to copy:</td><td>
@@ -1778,6 +1811,7 @@ function BackupDirectionChanged() {
     <input type='checkbox' id='backup.Backups'>Backups <span style="color: #AA0000">*</span><br>
 </td></tr></table>
 </td></tr>
+<tr><td>Delete extras:</td><td><input type='checkbox' id='backup.DeleteExtra'> (Delete extra files on destination that do not exist on the source)</td></tr>
                         <tr><td></td><td>
                                 <input type='button' class="buttons" value="Copy" onClick="PerformCopy();"></input>
                         </table>

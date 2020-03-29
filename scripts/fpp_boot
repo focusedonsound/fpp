@@ -2,12 +2,6 @@
 
 BINDIR=$(cd $(dirname $0) && pwd)
 
-# See if we should be running from /home/fpp/fpp
-if [ "x${BINDIR}" == "x/opt/fpp/scripts" -a -f "/home/fpp/fpp/scripts/fpp_boot" ]
-then
-    exec /home/fpp/fpp/scripts/fpp_boot
-fi
-
 . ${BINDIR}/common
 . ${BINDIR}/functions
 
@@ -18,29 +12,7 @@ then
 	chmod 775 ${LOGDIR}
 fi
 
-if [ ! -f "${MEDIADIR}/.auto_update_disabled" ]
-then
-    WaitForInterfacesUp
-	${SCRIPTDIR}/git_pull
-fi
-
-
-${SCRIPTDIR}/upgrade_config
-
 ${SCRIPTDIR}/timezone_sync
-
-if [ "${FPPPLATFORM}" = "Raspberry Pi" ]
-then
-        PiLCDenabled=$(getSetting PI_LCD_Enabled)
-
-        if [ "x${PiLCDenabled}" = "x1" ]
-        then
-          echo "FPP - Checking for configured LCD, LCD Enabled, starting LCD daemon"
-          ${FPPDIR}/scripts/lcd/fppLCD start
-        else
-          echo "FPP - Checking for configured LCD, LCD Disabled"
-        fi
-fi
 
 WaitForInterfacesUp
 
@@ -94,6 +66,12 @@ if [ ${HASSOUND} -eq 1 ]; then
         CARDID=0
         setSetting "AudioOutput" "0"
     fi
+    if [ "$CARDID" == "0" -a -f "/home/fpp/media/tmp/asoundrc" ]; then
+        # if the selected card is the built in card and the cape provides the required asoundrc
+        # then we will use that.   Various capes may need special also configuration in order
+        # to properly be able to have volume control work
+        cp -f "/home/fpp/media/tmp/asoundrc" /root/.asoundrc
+    fi
     VOLUME=$(getSetting volume)
     if [ "x${VOLUME}" = "x" ]; then
         setSetting volume 70
@@ -128,8 +106,7 @@ if [ ${HASSOUND} -eq 1 ]; then
 
     MIXERDEVICES=$(amixer -c $CARDID scontrols | cut -f2 -d"'")
     MIXERDEVICE=$(getSetting AudioMixerDevice)
-    if [ -z ${MIXERDEVICE} ]
-    then
+    if [ -z "${MIXERDEVICE}" ]; then
         MIXERDEVICE=$(amixer -c $CARDID scontrols | head -1 | cut -f2 -d"'")
         setSetting AudioMixerDevice $MIXERDEVICE
     else
@@ -154,10 +131,6 @@ then
     if [ ! -e /dev/spidev0.0 ]; then
         sleep 0.5
     fi
-
-	# See if we have a PiFace connected
-	echo "FPP - Checking for PiFace"
-	detectPiFace
 
 	# See if we have any Falcon hardware on the SPI port
 	echo "FPP - Checking for Falcon hardware on SPI port"
@@ -187,6 +160,3 @@ then
         echo "FPP - No IP(s) found"
     fi
 fi
-
-# set the Source port for outgoing ARTNET packets to match the spec
-/sbin/iptables -t nat -I POSTROUTING -p udp --dport 6454 -j SNAT --to-source :6454

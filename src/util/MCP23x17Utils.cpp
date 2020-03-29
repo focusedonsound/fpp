@@ -91,6 +91,9 @@ MCP23x17PinCapabilities::MCP23x17PinCapabilities(const std::string &n, uint32_t 
 
 int MCP23x17PinCapabilities::configPin(const std::string& mode,
                                      bool directionOut) const {
+    if (mode == "pwm" || mode == "uart") {
+        return 0;
+    }
     int pin = this->kernelGpio - gpioBase;
     int reg = (pin < 8) ? MCP23x17_IODIRA : MCP23x17_IODIRB;
     int pureg = (pin < 8) ? MCP23x17_GPPUA : MCP23x17_GPPUB;
@@ -177,11 +180,13 @@ void MCP23x17PinCapabilities::Init(int base) {
         status_port_b = iB;
         
         MCP23x17PinCapabilities testPin("MCP23x17-1", 215, 215);
+        testPin.configPin("gpio");
         int a = testPin.getValue();
         testPin.setValue(1);
         int b = testPin.getValue();
         testPin.setValue(0);
         int c = testPin.getValue();
+
         if (a == b && b == c) {
             //could not change the value, assume no PiFace found
             delete MCP23x17_SPI;
@@ -196,6 +201,11 @@ void MCP23x17PinCapabilities::Init(int base) {
     } else {
         delete MCP23x17_SPI;
         MCP23x17_SPI = nullptr;
+    }
+}
+void MCP23x17PinCapabilities::getPinNames(std::vector<std::string> &ret) {
+    for (auto &a : MCP23x17_PINS) {
+        ret.push_back(a.name);
     }
 }
 
@@ -216,3 +226,6 @@ const PinCapabilities &MCP23x17PinCapabilities::getPinByGPIO(int i) {
     return NULL_WP_INSTANCE;
 }
 
+const PinCapabilities &MCP23x17PinCapabilities::getPinByUART(const std::string &n) {
+    return NULL_WP_INSTANCE;
+}

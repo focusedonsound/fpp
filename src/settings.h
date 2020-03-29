@@ -61,7 +61,6 @@ public:
     char    *pluginDirectory = nullptr;
     char    *playlistDirectory = nullptr;
     char    *pixelnetFile = nullptr;
-    char    *scheduleFile = nullptr;
     char    *logFile = nullptr;
     char    *silenceMusic = nullptr;
     char    *settingsFile = nullptr;
@@ -85,7 +84,6 @@ int parseArguments(int argc, char **argv);
 int loadSettings(const char *filename);
 void CreateSettingsFile(char * file);
 void CheckExistanceOfDirectoriesAndFiles(void);
-int saveSettingsFile(void);
 int parseSetting(char *key, char *value);
 
 // Getters
@@ -109,7 +107,6 @@ char *getPluginDirectory(void);
 char *getPlaylistDirectory(void);
 char *getUniverseFile(void);
 char *getPixelnetFile(void);
-char *getScheduleFile(void);
 char *getLogFile(void);
 char *getSilenceMusic(void);
 char *getSettingsFile(void);

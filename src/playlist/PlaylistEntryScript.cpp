@@ -33,9 +33,6 @@
 
 #include "common.h"
 #include "log.h"
-#include "mediaoutput/mpg123.h"
-#include "mediaoutput/ogg123.h"
-#include "mediaoutput/omxplayer.h"
 #include "PlaylistEntryScript.h"
 #include "scripts.h"
 #include "settings.h"
@@ -162,7 +159,7 @@ Json::Value PlaylistEntryScript::GetConfig(void)
     t /= 1000;
 	result["scriptFilename"]   = m_scriptFilename;
 	result["blocking"]         = m_blocking;
-    result["secondsElapsed"]   = t;
+	result["secondsElapsed"]   = (Json::UInt64)t;
 
 	return result;
 }
@@ -177,7 +174,7 @@ Json::Value PlaylistEntryScript::GetMqttStatus(void)
     t /= 1000;
     result["scriptFilename"]   = m_scriptFilename;
     result["blocking"]         = m_blocking;
-    result["secondsElapsed"]   = t;
+    result["secondsElapsed"]   = (Json::UInt64)t;
     
     return result;
 }

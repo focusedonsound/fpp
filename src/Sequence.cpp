@@ -43,7 +43,7 @@
 #include "fppd.h"
 #include "log.h"
 #include "MultiSync.h"
-#include "PixelOverlay.h"
+#include "overlays/PixelOverlay.h"
 #include "Plugins.h"
 #include "Sequence.h"
 #include "Warnings.h"
@@ -523,8 +523,8 @@ void Sequence::ProcessSequenceData(int ms, int checkControlChannels) {
     if (SDLOutput::IsOverlayingVideo()) {
         SDLOutput::ProcessVideoOverlay(ms);
     }
-    if (PixelOverlayManager::INSTANCE.UsingMemoryMapInput()) {
-        PixelOverlayManager::INSTANCE.OverlayMemoryMap(m_seqData);
+    if (PixelOverlayManager::INSTANCE.hasActiveOverlays()) {
+        PixelOverlayManager::INSTANCE.doOverlays((uint8_t*)m_seqData);
     }
 
     if (checkControlChannels && getControlMajor() && getControlMinor())
@@ -532,8 +532,7 @@ void Sequence::ProcessSequenceData(int ms, int checkControlChannels) {
         char thisMajor = m_seqData[getControlMajor()-1];
         char thisMinor = m_seqData[getControlMinor()-1];
 
-        // Change to '== 1' in FPP v3.x and change 'RawEventIDs' setting to match
-        if (m_seqControlRawIDs <= 1)
+        if (m_seqControlRawIDs == 1)
         {
             thisMajor = NormalizeControlValue(thisMajor);
             thisMinor = NormalizeControlValue(thisMinor);

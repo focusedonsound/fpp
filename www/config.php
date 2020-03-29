@@ -23,13 +23,17 @@ $pluginSettings = array();
 $settings['fppMode'] = "player";
 
 // Helper function for accessing the global settings array
-function GetSettingValue($setting) {
-	global $settings;
+function GetSettingValue($setting, $default = '', $prefix = '', $suffix = '') {
+    global $settings;
 
-	if (isset($settings[$setting]))
-		return $settings[$setting];
+    if (isset($settings[$setting])) {
+        if ($settings[$setting] != '')
+            return $prefix . $settings[$setting] . $suffix;
+        else
+            return $default;
+    }
 
-	return;  // FIXME, should we do this or return something else
+    return $default;
 }
 
 function LoadLocale()
@@ -239,6 +243,10 @@ if ($settings['Platform'] == "Raspberry Pi") {
 } else if ($settings['Platform'] == "OrangePi") {
 	$settings['Logo'] = "orangepi_logo.png";
 	$settings['LogoLink'] = "http://www.orangepi.org/";
+	$settings['SubPlatform'] = trim(file_get_contents("/sys/firmware/devicetree/base/model"));
+	if (preg_match('/Orange Pi Zero/', $settings['SubPlatform'])) {
+		$settings['Logo'] = "orangepi_zero_logo.png";
+	}
 } else if ($settings['Platform'] == "Pine64") {
 	$settings['Logo'] = "pine64_logo.png";
 	$settings['LogoLink'] = "https://www.pine64.org/";
@@ -425,6 +433,9 @@ $settings['emailfromtext'] = $emailfromtext;
 $settings['emailtoemail'] = $emailtoemail;
 $settings['outputProcessorsFile'] = $outputProcessorsFile;
 
+if ((isset($settings['masqUIPlatform'])) && ($settings['masqUIPlatform'] != ''))
+    $settings['Platform'] = $settings['masqUIPlatform'];
+
 if (!isset($settings['restartFlag']))
 	$settings['restartFlag'] = 0;
 
@@ -465,6 +476,14 @@ if ($debug)
 	error_log("emailtoemail: $emailtoemail");
 }
 
+if (!isset($settings['uiLevel']))
+    $settings['uiLevel'] = 0;
+
+$uiLevel = $settings['uiLevel'];
+
+define('MINYEAR', date('Y'));
+define('MAXYEAR', date('Y') + 5);
+
 LoadLocale();
 
 /////////////////////////////////////////////////////////////////////////////
@@ -491,6 +510,8 @@ function GetDirSetting($dir)
 if (!isset($skipJSsettings)) {
 ?>
 <script type="text/javascript">
+    MINYEAR = <? echo MINYEAR; ?>;
+    MAXYEAR = <? echo MAXYEAR; ?>;
 	var settings = new Array();
 <?
 	foreach ($settings as $key => $value) {
@@ -520,4 +541,8 @@ if (!isset($skipJSsettings)) {
 </script>
 <?
 }
+
+// Put variables here that we don't want in the JavaScript settings array
+$settings['htaccessContents'] = "php_value max_input_vars 5000\nphp_value upload_max_filesize 4G\nphp_value post_max_size 4G\n";
+
 ?>

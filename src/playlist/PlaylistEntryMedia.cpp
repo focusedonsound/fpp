@@ -26,7 +26,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <thread>
-#include <boost/algorithm/string.hpp>
+
+#if __GNUC__ >= 8
+#  include <filesystem>
+using namespace std::filesystem;
+#else
+#  include <experimental/filesystem>
+using namespace std::experimental::filesystem;
+#endif
+
 #include <sys/wait.h>
 
 #include "log.h"
@@ -37,10 +45,6 @@
 #include "Plugins.h"
 #include "settings.h"
 #include "common.h"
-#include "mediaoutput/mpg123.h"
-#include "mediaoutput/ogg123.h"
-#include "mediaoutput/omxplayer.h"
-#include "mediaoutput/SDLOut.h"
 #include "Playlist.h"
 
 
@@ -59,16 +63,17 @@ PlaylistEntryMedia::PlaylistEntryMedia(PlaylistEntryBase *parent)
 	m_minutesTotal(0),
 	m_secondsTotal(0),
 	m_mediaSeconds(0.0),
-	m_speedDelta(0),
 	m_mediaOutput(NULL),
     m_videoOutput("--Default--"),
-    m_openTime(0)
+    m_openTime(0),
+    m_fileMode("single")
 {
     LogDebug(VB_PLAYLIST, "PlaylistEntryMedia::PlaylistEntryMedia()\n");
     if (m_openStartDelay == -1) {
         m_openStartDelay = getSettingInt("openStartDelay");
     }
 	m_type = "media";
+	m_fileSeed = (unsigned int)time(NULL);
 	pthread_mutex_init(&m_mediaOutputLock, NULL);
 }
 
@@ -87,27 +92,55 @@ int PlaylistEntryMedia::Init(Json::Value &config)
 {
     LogDebug(VB_PLAYLIST, "PlaylistEntryMedia::Init()\n");
 
-	if (!config.isMember("mediaName"))
-	{
-		LogErr(VB_PLAYLIST, "Missing mediaName entry\n");
-		return 0;
-	}
+    if (config.isMember("fileMode")) {
+        m_fileMode = config["fileMode"].asString();
+    }
 
-	m_mediaFilename = config["mediaName"].asString();
-    
+    if (m_fileMode == "single") {
+        if (config.isMember("mediaName")) {
+            m_mediaFilename = config["mediaName"].asString();
+        } else {
+            LogErr(VB_PLAYLIST, "Missing mediaName entry\n");
+            return 0;
+        }
+    } else {
+        if (GetFileList()) {
+            m_mediaFilename = GetNextRandomFile();
+        } else {
+            LogErr(VB_PLAYLIST, "Error, no files found when trying to play random file in %s mode\n",
+                m_fileMode.c_str());
+            return 0;
+        }
+    }
+
     if (config.isMember("videoOut")) {
         m_videoOutput = config["videoOut"].asString();
     }
-	return PlaylistEntryBase::Init(config);
+
+    return PlaylistEntryBase::Init(config);
 }
 
 
 int PlaylistEntryMedia::PreparePlay() {
-    LogDebug(VB_PLAYLIST, "PlaylistEntryMedia::StartPlaying()\n");
+    LogDebug(VB_PLAYLIST, "PlaylistEntryMedia::PreparePlay()\n");
     
     if (!CanPlay()) {
         FinishPlay();
         return 0;
+    }
+
+    if (m_fileMode != "single") {
+        if (m_files.size()) {
+            m_mediaFilename = GetNextRandomFile();
+        } else {
+            if (GetFileList()) {
+                m_mediaFilename = GetNextRandomFile();
+            } else {
+                LogErr(VB_PLAYLIST, "Error, no files found when trying to play random file in %s mode\n",
+                    m_fileMode.c_str());
+                return 0;
+            }
+        }
     }
 
     if (!OpenMediaOutput()) {
@@ -164,8 +197,6 @@ int PlaylistEntryMedia::StartPlaying(void)
         pthread_mutex_unlock(&m_mediaOutputLock);
         return 0;
     }
-    
-    mediaOutputStatus.speedDelta = 0;
     
     pthread_mutex_unlock(&m_mediaOutputLock);
 
@@ -293,7 +324,7 @@ int PlaylistEntryMedia::OpenMediaOutput(void)
 		return 0;
 	}
 
-	std::string ext = boost::algorithm::to_lower_copy(tmpFile.substr(found + 1));
+	std::string ext = toLowerCopy(tmpFile.substr(found + 1));
 
     LogDebug(VB_PLAYLIST, "PlaylistEntryMedia - Starting %s\n", tmpFile.c_str());
 
@@ -315,32 +346,12 @@ int PlaylistEntryMedia::OpenMediaOutput(void)
 #endif
     }
 
-#if !defined(PLATFORM_BBB)
-    if (getSettingInt("LegacyMediaOutputs") && (ext == "mp3" || ext == "ogg")) {
-        if (ext == "mp3") {
-            m_mediaOutput = new mpg123Output(tmpFile, &mediaOutputStatus);
-        } else if (ext == "ogg") {
-            m_mediaOutput = new ogg123Output(tmpFile, &mediaOutputStatus);
-        }
-    } else
-#endif
-	if (IsExtensionAudio(ext)) {
-        m_mediaOutput = new SDLOutput(tmpFile, &mediaOutputStatus, "--Disabled--");
-#ifdef PLATFORM_PI
-    } else if (IsExtensionVideo(ext) && vOut == "--HDMI--") {
-        m_mediaOutput = new omxplayerOutput(tmpFile, &mediaOutputStatus);
-#endif
-    } else if (IsExtensionVideo(ext)) {
-        m_mediaOutput = new SDLOutput(tmpFile, &mediaOutputStatus, vOut);
-	} else {
-		pthread_mutex_unlock(&mediaOutputLock);
-		LogDebug(VB_MEDIAOUT, "No Media Output handler for %s\n", tmpFile.c_str());
-		return 0;
-	}
+    m_mediaOutput = CreateMediaOutput(tmpFile, vOut);
 
 	if (!m_mediaOutput)
 	{
 		pthread_mutex_unlock(&m_mediaOutputLock);
+        LogDebug(VB_MEDIAOUT, "No Media Output handler for %s\n", tmpFile.c_str());
 		return 0;
 	}
 
@@ -387,6 +398,54 @@ int PlaylistEntryMedia::CloseMediaOutput(void)
 /*
  *
  */
+int PlaylistEntryMedia::GetFileList(void)
+{
+    std::string dir;
+
+    m_files.clear();
+
+    if (m_fileMode == "randomVideo")
+        dir = getVideoDirectory();
+    else if (m_fileMode == "randomAudio")
+        dir = getMusicDirectory();
+
+    for (auto &cp : recursive_directory_iterator(dir)) {
+        std::string entry = cp.path().string();
+        m_files.push_back(entry);
+    }
+
+    LogDebug(VB_PLAYLIST, "%d images in %s directory\n", m_files.size(), dir.c_str());
+
+    return m_files.size();
+}
+
+/*
+ *
+ */
+std::string PlaylistEntryMedia::GetNextRandomFile(void)
+{
+    std::string filename;
+
+    if (!m_files.size())
+        GetFileList();
+
+    if (!m_files.size()) {
+        LogWarn(VB_PLAYLIST, "No files found in GetNextRandomFile()\n");
+        return filename;
+    }
+
+    int i = rand_r(&m_fileSeed) % m_files.size();
+    filename = m_files[i];
+    m_files.erase(m_files.begin() + i);
+
+    LogDebug(VB_PLAYLIST, "GetNextRandomFile() = %s\n", filename.c_str());
+
+    return filename;
+}
+
+/*
+ *
+ */
 Json::Value PlaylistEntryMedia::GetConfig(void)
 {
 	Json::Value result = PlaylistEntryBase::GetConfig();
@@ -401,7 +460,6 @@ Json::Value PlaylistEntryMedia::GetConfig(void)
 	result["minutesTotal"]        = mediaOutputStatus.minutesTotal;
 	result["secondsTotal"]        = mediaOutputStatus.secondsTotal;
 	result["mediaSeconds"]        = mediaOutputStatus.mediaSeconds;
-	result["speedDelta"]          = mediaOutputStatus.speedDelta;
 
 	return result;
 }

@@ -23,8 +23,7 @@
  *   along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <boost/algorithm/string/replace.hpp>
-
+#include "common.h"
 #include "log.h"
 #include "PlaylistEntryBase.h"
 
@@ -39,6 +38,7 @@ PlaylistEntryBase::PlaylistEntryBase(PlaylistEntryBase *parent)
 	m_playOnce(0),
 	m_playCount(0),
 	m_isPrepped(0),
+	m_deprecated(0),
 	m_parent(parent)
 {
     LogDebug(VB_PLAYLIST, "PlaylistEntryBase::PlaylistEntryBase()\n");
@@ -225,6 +225,7 @@ Json::Value PlaylistEntryBase::GetConfig(void)
 	result["isFinished"] = m_isFinished;
 	result["playOnce"]   = m_playOnce;
 	result["playCount"]  = m_playCount;
+	result["deprecated"] = m_deprecated;
 
 	return result;
 }
@@ -238,7 +239,7 @@ std::string PlaylistEntryBase::ReplaceMatches(std::string in)
 
 	LogDebug(VB_PLAYLIST, "In: '%s'\n", in.c_str());
 
-	boost::replace_all(out, "%t", m_type);
+	replaceAll(out, "%t", m_type);
 
 	LogDebug(VB_PLAYLIST, "Out: '%s'\n", out.c_str());
 

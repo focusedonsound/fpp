@@ -44,7 +44,6 @@
 #include "common.h"
 #include "e131bridge.h"
 #include "log.h"
-#include "PixelOverlay.h"
 #include "Sequence.h"
 #include "settings.h"
 #include "command.h"
@@ -128,16 +127,7 @@ void LoadInputUniversesFromFile(void)
 	}
 
 	Json::Value root;
-    Json::Reader reader;
-	std::ifstream t(filename);
-	std::stringstream buffer;
-
-	buffer << t.rdbuf();
-
-	std::string config = buffer.str();
-
-	bool success = reader.parse(buffer.str(), root);
-    if (!success) {
+    if (!LoadJsonFromFile(filename, root)) {
 		LogErr(VB_E131BRIDGE, "Error parsing %s\n", filename);
 		return;
 	}
@@ -894,5 +884,4 @@ void Fake_Bridge_Initialize(std::map<int, std::function<bool(int)>> &callbacks) 
     }
     AddFakeListener(DDP_PORT, "DDP", callbacks);
     AddFakeListener(E131_DEST_PORT, "E1.31", callbacks);
-    AddFakeListener(0x1936, "ArtNet", callbacks);
 }

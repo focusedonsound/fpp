@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include <jsoncpp/json/json.h>
+
 class PinCapabilities {
 public:
     static void InitGPIO();
@@ -21,18 +23,24 @@ public:
     uint8_t gpioIdx;
     uint8_t gpio;
 
-    uint8_t pru;
-    uint8_t pruPin;
+    int8_t pru;
+    int8_t pruPin;
     
     int8_t pwm;
     int8_t subPwm;
     
     int8_t i2cBus;
     
+    std::string uart;
+    
 
+    virtual Json::Value toJSON() const;
     
     virtual int configPin(const std::string& mode = "gpio",
                           bool directionOut = true) const = 0;
+    virtual bool supportsPullUp() const { return true; }
+    virtual bool supportsPullDown() const { return true; }
+    virtual bool supportsGpiod() const { return true; }
 
     virtual bool getValue() const = 0;
     virtual void setValue(bool i) const = 0;
@@ -48,6 +56,7 @@ public:
     
     static const PinCapabilities &getPinByName(const std::string &n);
     static const PinCapabilities &getPinByGPIO(int i);
+    static const PinCapabilities &getPinByUART(const std::string &n);
     static std::vector<std::string> getPinNames();
 protected:
     static void enableOledScreen(int i2cBus, bool enable);
@@ -61,7 +70,11 @@ public:
     PinCapabilitiesFluent(const std::string &n, uint8_t k) : PinCapabilities(n, k) {}
     virtual ~PinCapabilitiesFluent() {}
 
-    
+    T& setGPIO(int chip, int pin) {
+        gpioIdx = chip;
+        gpio = pin;
+        return * (static_cast<T*>(this));
+    }
     T& setPwm(int p, int sub) {
         pwm = p;
         subPwm = sub;
@@ -76,7 +89,10 @@ public:
         pruPin = pin;
         return * (static_cast<T*>(this));
     }
-    
+    T& setUART(const std::string &u) {
+        uart = u;
+        return * (static_cast<T*>(this));
+    }
 };
 
 #endif

@@ -3,9 +3,7 @@
 $skipJSsettings = 1;
 require_once('common.php');
 
-require_once('playlistentry.php');
 require_once('universeentry.php');
-require_once('scheduleentry.php');
 require_once('pixelnetdmxentry.php');
 require_once('commandsocket.php');
 
@@ -17,7 +15,6 @@ $nonXML = Array(
 	"getFile" => 1,
 	"getGitOriginLog" => 1,
 	"gitStatus" => 1,
-	"getVideoInfo" => 1,
 	"viewReleaseNotes" => 1,
 	"viewRemoteScript" => 1
 	);
@@ -31,25 +28,15 @@ $_SESSION['session_id'] = session_id();
 
 
 $command_array = Array(
-	"getPlayLists" => 'GetPlaylists',
 	"getFiles" => 'GetFiles',
 	"getZip" => 'GetZip',
-	"setPlayListFirstLast" => 'SetPlayListFirstLast',
-	"addPlayList" => 'AddPlaylist',
 	"getUniverseReceivedBytes" => 'GetUniverseReceivedBytes',
-	"playlistEntryPositionChanged" => 'PlaylistEntryPositionChanged',
-	"deletePlaylist" => 'DeletePlaylist',
-	"deleteEntry" => 'DeleteEntry',
 	"deleteFile" => 'DeleteFile',
-	"addPlaylistEntry" => 'AddPlayListEntry',
 	"setUniverseCount" => 'SetUniverseCount',
 	"getUniverses" => 'GetUniverses',
 	"getPixelnetDMXoutputs" => 'GetPixelnetDMXoutputs',
 	"deleteUniverse" => 'DeleteUniverse',
 	"cloneUniverse" => 'CloneUniverse',
-	"getSchedule" => 'GetSchedule',
-	"addScheduleEntry" => 'AddScheduleEntry',
-	"deleteScheduleEntry" => 'DeleteScheduleEntry',
 	"viewReleaseNotes" => 'ViewReleaseNotes',
 	"viewRemoteScript" => 'ViewRemoteScript',
 	"installRemoteScript" => 'InstallRemoteScript',
@@ -73,8 +60,6 @@ $command_array = Array(
 	"getGitOriginLog" => 'GetGitOriginLog',
 	"gitStatus" => 'GitStatus',
 	"resetGit" => 'ResetGit',
-	"setAutoUpdate" => 'SetAutoUpdate',
-	"setDeveloperMode" => 'SetDeveloperMode',
 	"setVolume" => 'SetVolume',
 	"setFPPDmode" => 'SetFPPDmode',
 	"getVolume" => 'GetVolume',
@@ -89,10 +74,8 @@ $command_array = Array(
 	"saveEvent" => 'SaveEvent',
 	"deleteEvent" => 'DeleteEvent',
 	"getFile" => 'GetFile',
-	"getVideoInfo" => 'GetVideoInfo',
 	"saveUSBDongle" => 'SaveUSBDongle',
 	"getInterfaceInfo" => 'GetInterfaceInfo',
-	"setPiLCDenabled" => 'SetPiLCDenabled',
 	"setupExtGPIO" => 'SetupExtGPIO',
 	"extGPIO" => 'ExtGPIO'
 );
@@ -113,10 +96,6 @@ if ( isset($_GET['command']) && !empty($_GET['command']) )
 		call_user_func($command_array[$_GET['command']]);
 	}
 	return;
-}
-else if(!empty($_POST['command']) && $_POST['command'] == "saveSchedule")
-{
-	SaveSchedule();
 }
 else if(!empty($_POST['command']) && $_POST['command'] == "saveHardwareConfig")
 {
@@ -218,32 +197,6 @@ function ResetGit()
 	EchoStatusXML("OK");
 }
 
-function SetAutoUpdate()
-{
-	$enabled = $_GET['enabled'];
-	check($enabled, "enabled", __FUNCTION__);
-
-	global $mediaDirectory;
-	if ($enabled)
-		unlink("$mediaDirectory/.auto_update_disabled");
-	else
-		exec("touch $mediaDirectory/.auto_update_disabled");
-}
-
-
-
-function SetDeveloperMode()
-{
-	$enabled = $_GET['enabled'];
-	check($enabled, "enabled", __FUNCTION__);
-
-	global $mediaDirectory;
-	if ($enabled)
-		exec("touch $mediaDirectory/.developer_mode");
-	else
-		unlink("$mediaDirectory/.developer_mode");
-}
-
 function SetVolume()
 {
 	global $SUDO;
@@ -304,25 +257,6 @@ function SetVolume()
 
 	// Why do we do this here and in fppd's settings.c
 	$status=exec($SUDO . " amixer -c $card set $mixerDevice -- " . $vol . "%");
-
-	EchoStatusXML($status);
-}
-
-function SetPiLCDenabled()
-{
-	global $SUDO;
-
-	$enabled = $_GET['enabled'];
-	check($enabled, "enabled", __FUNCTION__);
-
-	if ($enabled == "true")
-	{
-		$status = exec($SUDO . " " . dirname(dirname(__FILE__)) . "/scripts/lcd/fppLCD start");
-	}
-	else
-	{
-		$status = exec($SUDO . " " . dirname(dirname(__FILE__)) . "/scripts/lcd/fppLCD stop");
-	}
 
 	EchoStatusXML($status);
 }
@@ -1097,317 +1031,6 @@ function GetLocalTime()
 	return exec("date");
 }
 
-function DeleteScheduleEntry()
-{
-	$index = $_GET['index'];
-	check($index, "index", __FUNCTION__);
-
-	if($index < count($_SESSION['ScheduleEntries']) && count($_SESSION['ScheduleEntries']) > 0 )
-	{
-		unset($_SESSION['ScheduleEntries'][$index]);
-		$_SESSION['ScheduleEntries'] = array_values($_SESSION['ScheduleEntries']);
-
-	}
-	EchoStatusXML('Success');
-}
-
-function AddScheduleEntry()
-{
-	$_SESSION['ScheduleEntries'][] = new ScheduleEntry(1,'',7,0,0,0,24,0,0,1,"2019-01-01","2099-12-31",0);
-	EchoStatusXML('Success');
-}
-
-function SaveSchedule()
-{
-	for($i=0;$i<count($_SESSION['ScheduleEntries']);$i++)
-	{
-		if(isset($_POST['chkEnable'][$i]))
-		{
-			$_SESSION['ScheduleEntries'][$i]->enable = 1;
-		}
-		else
-		{
-			$_SESSION['ScheduleEntries'][$i]->enable = 0;
-		}
-		$_SESSION['ScheduleEntries'][$i]->playlist = 	$_POST['selPlaylist'][$i];
-		$_SESSION['ScheduleEntries'][$i]->startDay = intval($_POST['selDay'][$i]);
-
-		if ($_SESSION['ScheduleEntries'][$i]->startDay & 0x10000) {
-			$dayMask = 0x10000;
-			if (isset($_POST['maskSunday'][$i]))
-				$dayMask |= 0x4000;
-			if (isset($_POST['maskMonday'][$i]))
-				$dayMask |= 0x2000;
-			if (isset($_POST['maskTuesday'][$i]))
-				$dayMask |= 0x1000;
-			if (isset($_POST['maskWednesday'][$i]))
-				$dayMask |= 0x0800;
-			if (isset($_POST['maskThursday'][$i]))
-				$dayMask |= 0x0400;
-			if (isset($_POST['maskFriday'][$i]))
-				$dayMask |= 0x0200;
-			if (isset($_POST['maskSaturday'][$i]))
-				$dayMask |= 0x0100;
-
-			$_SESSION['ScheduleEntries'][$i]->startDay |= $dayMask;
-		}
-
-		if ($_POST['txtStartTime'][$i] == 'SunRise')
-		{
-			$_SESSION['ScheduleEntries'][$i]->startHour = '25';
-			$_SESSION['ScheduleEntries'][$i]->startMinute = '00';
-			$_SESSION['ScheduleEntries'][$i]->startSecond = '00';
-		}
-		else if ($_POST['txtStartTime'][$i] == 'SunSet')
-		{
-			$_SESSION['ScheduleEntries'][$i]->startHour = '26';
-			$_SESSION['ScheduleEntries'][$i]->startMinute = '00';
-			$_SESSION['ScheduleEntries'][$i]->startSecond = '00';
-		}
-		else
-		{
-			$startTime = explode(":",$_POST['txtStartTime'][$i],3);
-			$_SESSION['ScheduleEntries'][$i]->startHour = $startTime[0];
-			$_SESSION['ScheduleEntries'][$i]->startMinute = $startTime[1];
-			$_SESSION['ScheduleEntries'][$i]->startSecond = $startTime[2];
-		}
-
-		if ($_POST['txtEndTime'][$i] == 'SunRise')
-		{
-			$_SESSION['ScheduleEntries'][$i]->endHour = '25';
-			$_SESSION['ScheduleEntries'][$i]->endMinute = '00';
-			$_SESSION['ScheduleEntries'][$i]->endSecond = '00';
-		}
-		else if ($_POST['txtEndTime'][$i] == 'SunSet')
-		{
-			$_SESSION['ScheduleEntries'][$i]->endHour = '26';
-			$_SESSION['ScheduleEntries'][$i]->endMinute = '00';
-			$_SESSION['ScheduleEntries'][$i]->endSecond = '00';
-		}
-		else
-		{
-			$endTime = explode(":",$_POST['txtEndTime'][$i],3);
-			$_SESSION['ScheduleEntries'][$i]->endHour = $endTime[0];
-			$_SESSION['ScheduleEntries'][$i]->endMinute = $endTime[1];
-			$_SESSION['ScheduleEntries'][$i]->endSecond = $endTime[2];
-		}
-
-		if(isset($_POST['chkRepeat'][$i]))
-			$_SESSION['ScheduleEntries'][$i]->repeat = 1;
-		else
-			$_SESSION['ScheduleEntries'][$i]->repeat = 0;
-
-		$_SESSION['ScheduleEntries'][$i]->startDate =	$_POST['txtStartDate'][$i];
-		$_SESSION['ScheduleEntries'][$i]->endDate   =	$_POST['txtEndDate'][$i];
-
-		if (trim($_SESSION['ScheduleEntries'][$i]->startDate) == "")
-			$_SESSION['ScheduleEntries'][$i]->startDate = "2019-01-01";
-		if (trim($_SESSION['ScheduleEntries'][$i]->endDate) == "")
-			$_SESSION['ScheduleEntries'][$i]->endDate = "2099-12-31";
-
-		$_SESSION['ScheduleEntries'][$i]->stopType = $_POST['selStopType'][$i];
-	}
-
-	SaveScheduleToFile();
-	FPPDreloadSchedule();
-
-	EchoStatusXML('Success');
-}
-
-function FPPDreloadSchedule()
-{
-	$status=SendCommand('R');
-}
-
-function SaveScheduleToFile()
-{
-	global $scheduleFile;
-
-	$entries = "";
-	$f=fopen($scheduleFile,"w") or exit("Unable to open file! : " . $scheduleFile);
-	for($i=0;$i<count($_SESSION['ScheduleEntries']);$i++)
-	{
-			if($i==0)
-			{
-			$entries .= sprintf("%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,",
-						$_SESSION['ScheduleEntries'][$i]->enable,
-						$_SESSION['ScheduleEntries'][$i]->playlist,
-						$_SESSION['ScheduleEntries'][$i]->startDay,
-						$_SESSION['ScheduleEntries'][$i]->startHour,
-						$_SESSION['ScheduleEntries'][$i]->startMinute,
-						$_SESSION['ScheduleEntries'][$i]->startSecond,
-						$_SESSION['ScheduleEntries'][$i]->endHour,
-						$_SESSION['ScheduleEntries'][$i]->endMinute,
-						$_SESSION['ScheduleEntries'][$i]->endSecond,
-						$_SESSION['ScheduleEntries'][$i]->repeat,
-						$_SESSION['ScheduleEntries'][$i]->startDate,
-						$_SESSION['ScheduleEntries'][$i]->endDate,
-						$_SESSION['ScheduleEntries'][$i]->stopType
-						);
-			}
-			else
-			{
-			$entries .= sprintf("\n%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,",
-						$_SESSION['ScheduleEntries'][$i]->enable,
-						$_SESSION['ScheduleEntries'][$i]->playlist,
-						$_SESSION['ScheduleEntries'][$i]->startDay,
-						$_SESSION['ScheduleEntries'][$i]->startHour,
-						$_SESSION['ScheduleEntries'][$i]->startMinute,
-						$_SESSION['ScheduleEntries'][$i]->startSecond,
-						$_SESSION['ScheduleEntries'][$i]->endHour,
-						$_SESSION['ScheduleEntries'][$i]->endMinute,
-						$_SESSION['ScheduleEntries'][$i]->endSecond,
-						$_SESSION['ScheduleEntries'][$i]->repeat,
-						$_SESSION['ScheduleEntries'][$i]->startDate,
-						$_SESSION['ScheduleEntries'][$i]->endDate,
-						$_SESSION['ScheduleEntries'][$i]->stopType
-						);
-			}
-
-	}
-	fwrite($f,$entries);
-	fclose($f);
-}
-
-function LoadScheduleFile()
-{
-	global $scheduleFile;
-
-	$_SESSION['ScheduleEntries']=NULL;
-
-	$f=fopen($scheduleFile,"r");
-	if($f == FALSE)
-	{
-		die();
-	}
-
-	while (!feof($f))
-	{
-		$line=fgets($f);
-		$line = trim($line);
-		$entry = explode(",",$line);
-		if ( ! empty($entry) && count($entry) > 1 )
-		{
-			$enable = $entry[0];
-			$playlist = $entry[1];
-			$startDay = $entry[2];
-			$startHour = $entry[3];
-			$startMinute = $entry[4];
-			$startSecond = $entry[5];
-			$endHour = $entry[6];
-			$endMinute = $entry[7];
-			$endSecond = $entry[8];
-			$repeat = $entry[9];
-			$startDate = "2019-01-01";
-			$endDate = "2099-12-31";
-			$stopType = 0;
-
-			if ((count($entry) >= 11) && $entry[10] != "")
-				$startDate = $entry[10];
-
-			if ((count($entry) >= 12) && $entry[11] != "")
-				$endDate = $entry[11];
-
-			if ((count($entry) >= 13) && $entry[12] != "")
-				$stopType = $entry[12];
-
-			$_SESSION['ScheduleEntries'][] = new ScheduleEntry($enable,$playlist,$startDay,$startHour,$startMinute,$startSecond,
-				$endHour, $endMinute, $endSecond, $repeat,$startDate,$endDate,$stopType);
-		}
-	}
-	fclose($f);
-}
-
-function GetSchedule()
-{
-	$reload = $_GET['reload'];
-	check($reload, "reload", __FUNCTION__);
-
-	if($reload == "TRUE")
-	{
-		LoadScheduleFile();
-	}
-
-	$doc = new DomDocument('1.0');
-	$root = $doc->createElement('ScheduleEntries');
-	$root = $doc->appendChild($root);
-	for($i=0;$i<count($_SESSION['ScheduleEntries']);$i++)
-	{
-		$ScheduleEntry = $doc->createElement('ScheduleEntry');
-		$ScheduleEntry = $root->appendChild($ScheduleEntry);
-		// enable
-		$enable = $doc->createElement('enable');
-		$enable = $ScheduleEntry->appendChild($enable);
-		$value = $doc->createTextNode($_SESSION['ScheduleEntries'][$i]->enable);
-		$value = $enable->appendChild($value);
-		// day
-		$day = $doc->createElement('day');
-		$day = $ScheduleEntry->appendChild($day);
-		$value = $doc->createTextNode($_SESSION['ScheduleEntries'][$i]->startDay);
-		$value = $day->appendChild($value);
-		// playlist
-		$playlist = $doc->createElement('playlist');
-		$playlist = $ScheduleEntry->appendChild($playlist);
-		$value = $doc->createTextNode($_SESSION['ScheduleEntries'][$i]->playlist);
-		$value = $playlist->appendChild($value);
-
-		// startTime
-		$startTime = $doc->createElement('startTime');
-		$startTime = $ScheduleEntry->appendChild($startTime);
-
-		if ($_SESSION['ScheduleEntries'][$i]->startHour == 25)
-			$sStartTime = 'SunRise';
-		else if ($_SESSION['ScheduleEntries'][$i]->startHour == 26)
-			$sStartTime = 'SunSet';
-		else
-			$sStartTime = sprintf("%02s:%02s:%02s", $_SESSION['ScheduleEntries'][$i]->startHour,
-													$_SESSION['ScheduleEntries'][$i]->startMinute,
-													$_SESSION['ScheduleEntries'][$i]->startSecond);
-		$value = $doc->createTextNode($sStartTime);
-		$value = $startTime->appendChild($value);
-		// endTime
-		$endTime = $doc->createElement('endTime');
-		$endTime = $ScheduleEntry->appendChild($endTime);
-
-		if ($_SESSION['ScheduleEntries'][$i]->endHour == 25)
-			$sEndTime = 'SunRise';
-		else if ($_SESSION['ScheduleEntries'][$i]->endHour == 26)
-			$sEndTime = 'SunSet';
-		else
-			$sEndTime = sprintf("%02s:%02s:%02s", $_SESSION['ScheduleEntries'][$i]->endHour,
-												  $_SESSION['ScheduleEntries'][$i]->endMinute,
-												  $_SESSION['ScheduleEntries'][$i]->endSecond);
-
-		$value = $doc->createTextNode($sEndTime);
-		$value = $endTime->appendChild($value);
-		// repeat
-		$repeat = $doc->createElement('repeat');
-		$repeat = $ScheduleEntry->appendChild($repeat);
-		$value = $doc->createTextNode($_SESSION['ScheduleEntries'][$i]->repeat);
-		$value = $repeat->appendChild($value);
-
-		// startDate
-		$startDate = $doc->createElement('startDate');
-		$startDate = $ScheduleEntry->appendChild($startDate);
-		$value = $doc->createTextNode($_SESSION['ScheduleEntries'][$i]->startDate);
-		$value = $startDate->appendChild($value);
-
-		// endDate
-		$endDate = $doc->createElement('endDate');
-		$endDate = $ScheduleEntry->appendChild($endDate);
-		$value = $doc->createTextNode($_SESSION['ScheduleEntries'][$i]->endDate);
-		$value = $endDate->appendChild($value);
-
-		// stopType
-		$stopType = $doc->createElement('stopType');
-		$stopType = $ScheduleEntry->appendChild($stopType);
-		$value = $doc->createTextNode($_SESSION['ScheduleEntries'][$i]->stopType);
-		$value = $stopType->appendChild($value);
-
-	}
-	echo $doc->saveHTML();
-}
-
 function SaveHardwareConfig()
 {
 	if (!isset($_POST['model']))
@@ -1847,70 +1470,6 @@ function SetUniverseCount()
 	EchoStatusXML('Success');
 }
 
-function AddPlayListEntry()
-{
-	$type = $_GET['type'];
-	$seqFile = $_GET['seqFile'];
-	$songFile = $_GET['mediaFile'];
-	$pause = $_GET['pause'];
-	$scriptName = $_GET['scriptName'];
-	$eventName = $_GET['eventName'];
-	$eventID = $_GET['eventID'];
-	$pluginData = $_GET['pluginData'];
-	check($section, "section", __FUNCTION__);
-	check($type, "type", __FUNCTION__);
-	check($seqFile, "seqFile", __FUNCTION__);
-	check($songFile, "songFile", __FUNCTION__);
-	check($pause, "pause", __FUNCTION__);
-	check($scriptName, "scriptName", __FUNCTION__);
-	check($eventName, "eventName", __FUNCTION__);
-	check($eventID, "eventID", __FUNCTION__);
-	check($pluginData, "pluginData", __FUNCTION__);
-	$index = 0;
-
-	// Always insert new entries into the main playlist section
-	$section = "MainPlaylist";
-
-	$_SESSION['playListEntries' . $section][] = new PlaylistEntry($type,$songFile,$seqFile,$pause,$scriptName,$eventName,$eventID,$pluginData,
-		0, // FIXME PLAYLIST
-		count($_SESSION['playListEntries' . $section]));
-	EchoStatusXML(sprintf("Playlist Entry added with ID #%d, playlist now has %d entries", count($_SESSION['playListEntries' . $section]) - 1, count($_SESSION['playListEntries' . $section])));
-}
-
-function GetPlaylists()
-{
-	global $playlistDirectory;
-	$filter = "";
-	if (isset($_GET['filter']))
-		$filter = $_GET['filter'];
-
-	$FirstList=TRUE;
-	$doc = new DomDocument('1.0');
-	$root = $doc->createElement('Playlists');
-	$root = $doc->appendChild($root);
-
-	if (!file_exists($playlistDirectory))
-	{
-		echo $doc->saveHTML();
-		return;
-	}
-
-	foreach(scandir($playlistDirectory) as $pFile)
-	{
-		if (($pFile != "." && $pFile != "..") &&
-			(is_file($playlistDirectory . '/' . $pFile)) &&
-			($filter == "" || preg_match('/' . $filter . '/', $pFile)))
-		{
-			$pFile = preg_replace("/\.json/", "", $pFile);
-			$playList = $doc->createElement('Playlist');
-			$playList = $root->appendChild($playList);
-			$value = $doc->createTextNode(utf8_encode($pFile));
-			$value = $playList->appendChild($value);
-		}
-	}
-	echo $doc->saveHTML();
-}
-
 function GetFileInfo(&$root, &$doc, $dirName, $fileName)
 {
 	$fileFullName = $dirName . '/' . $fileName;
@@ -2014,201 +1573,6 @@ function GetFiles()
 	echo strtr($doc->saveHTML(), $trans);
 }
 
-function AddPlaylist()
-{
-	global $playlistDirectory;
-
-	$name = $_GET['pl'];
-	check($name, "name", __FUNCTION__);
-
-	$doc = new DomDocument('1.0');
-	$name =str_replace(' ', '_', $name);
-
-	//TODO Playlists - Reassess whether this is still needed once scheduler is stored in json
-	//Replace Illegal chars in the playlist name
-	$name = ReplaceIllegalCharacters($name);
-
-	$response = $doc->createElement('Response');
-	$response = $doc->appendChild($response);
-	$successAttribute = $doc->createAttribute('Success');
-
-	if($name != "")
-	{
-		$successAttribute->value = 'true';
-		$successAttribute = $response->appendChild($successAttribute);
-
-		//$_SESSION['currentPlaylist']	= $pl;
-		$filename = $playlistDirectory . '/' . $name . ".json";
-		$file = fopen($filename, "w");
-		$emptyPlaylist = <<<EOT
-{
-	"name": "$name",
-	"repeat": 0,
-	"loopCount": 0,
-	"leadIn": [
-	],
-	"mainPlaylist": [
-	],
-	"leadOut": [
-	]
-}
-EOT;
-		fwrite($file, $emptyPlaylist);
-		fclose($file);
-
-		$playList = $doc->createElement('Playlist');
-		$playList = $response->appendChild($playList);
-		$value = $doc->createTextNode($name);
-		$value = $playList->appendChild($value);
-	}
-	else
-	{
-		//$successAttribute->value = 'false';
-	}
-	$_SESSION['playListEntriesLeadIn'] = NULL;
-	$_SESSION['playListEntriesMainPlaylist'] = NULL;
-	$_SESSION['playListEntriesLeadOut'] = NULL;
-	echo $doc->saveHTML();
-}
-
-function PlaylistEntryPositionChanged()
-{
-	$newSection = $_GET['newSection'];
-	$newIndex = $_GET['newIndex'];
-	$oldSection = $_GET['oldSection'];
-	$oldIndex = $_GET['oldIndex'];
-	check($newSection, "newSection", __FUNCTION__);
-	check($newIndex, "newIndex", __FUNCTION__);
-	check($oldSection, "oldSection", __FUNCTION__);
-	check($oldIndex, "oldIndex", __FUNCTION__);
-
-	if ($newSection == $oldSection)
-	{
-		if(count($_SESSION['playListEntries' . $newSection]) > $oldIndex && count($_SESSION['playListEntries' . $newSection]) > $newIndex)
-		{
-			$_SESSION['playListEntries' . $newSection][$oldIndex]->index = $newIndex;
-			if($newIndex < 	$oldIndex)
-			{
-				for($index=$newIndex;$index<$oldIndex;$index++)
-				{
-					$_SESSION['playListEntries' . $newSection][$index]->index++;
-				}
-			}
-			if ($oldIndex < $newIndex)
-			{
-				for($index=$oldIndex+1;$index<=$newIndex;$index++)
-				{
-					$_SESSION['playListEntries' . $newSection][$index]->index--;
-				}
-			}
-			usort($_SESSION['playListEntries' . $newSection],"cmp_index");
-		}
-	}
-	else
-	{
-		// Insert the new entry
-		$_SESSION['playListEntries' . $newSection][] = new PlaylistEntry(
-			$_SESSION['playListEntries' . $oldSection][$oldIndex]->type,
-			$_SESSION['playListEntries' . $oldSection][$oldIndex]->songFile,
-			$_SESSION['playListEntries' . $oldSection][$oldIndex]->seqFile,
-			$_SESSION['playListEntries' . $oldSection][$oldIndex]->pause,
-			$_SESSION['playListEntries' . $oldSection][$oldIndex]->scriptName,
-			$_SESSION['playListEntries' . $oldSection][$oldIndex]->eventName,
-			$_SESSION['playListEntries' . $oldSection][$oldIndex]->eventID,
-			$_SESSION['playListEntries' . $oldSection][$oldIndex]->pluginData,
-			$_SESSION['playListEntries' . $oldSection][$oldIndex]->entry,
-			$newIndex);
-
-		// Backup the entry
-		unset($_SESSION['playListEntries' . $oldSection][$oldIndex]);
-
-		// Delete from the old section
-		for($index = $oldIndex+1; $index < count($_SESSION['playListEntries' . $oldSection]); $index++)
-		{
-			$_SESSION['playListEntries' . $oldSection][$index]->index--;
-		}
-		usort($_SESSION['playListEntries' . $oldSection],"cmp_index");
-
-		// Insert into the new section
-		if ($newIndex < (count($_SESSION['playListEntries' . $newSection]) - 1))
-		{
-			for($index = $newIndex; $index < (count($_SESSION['playListEntries' . $newSection]) - 1); $index++)
-			{
-				$_SESSION['playListEntries' . $newSection][$index]->index++;
-			}
-			usort($_SESSION['playListEntries' . $newSection],"cmp_index");
-		}
-	}
-
-	EchoStatusXML('NewSectionCount: ' . count($_SESSION['playListEntries' . $newSection]));
-}
-
-function DeletePlaylist()
-{
-	global $playlistDirectory;
-
-	$name = $_GET['name'];
-	check($name, "name", __FUNCTION__);
-
-    //Check if the file exists, old playlists don't have extensions
-    $playlist_exists = file_exists($playlistDirectory . '/' . $name);
-
-    if($playlist_exists){
-        //then just delete the file
-        $delete_status = unlink($playlistDirectory . '/' . $name);
-    }	else{
-        //if it doesn't exist, then add .json to the filename
-        //All Playlists in FPP v2 are json files
-        $name = $name . '.json';
-        //
-        $delete_status = unlink($playlistDirectory . '/' . $name);
-    }
-
-    if($delete_status == true){
-        EchoStatusXML('Success');
-    }else{
-        EchoStatusXML('Failure');
-    }
-}
-
-function DeleteEntry()
-{
-	$section = $_GET['section'];
-	$index = $_GET['index'];
-	check($section, "section", __FUNCTION__);
-	check($index, "index", __FUNCTION__);
-
-	$doc = new DomDocument('1.0');
-	$root = $doc->createElement('Status');
-	$root = $doc->appendChild($root);
-
-	if ($section == 'LeadOut')
-		$index -= count($_SESSION['playListEntriesMainPlaylist']);
-
-	if ($section != 'LeadIn')
-		$index -= count($_SESSION['playListEntriesLeadIn']);
-
-	// Delete from array.
-	if($index < count($_SESSION['playListEntries' . $section]))
-	{
-		unset($_SESSION['playListEntries' . $section][$index]);
-		$_SESSION['playListEntries' . $section] = array_values($_SESSION['playListEntries' . $section]);
-		for($i=0;$i<count($_SESSION['playListEntries' . $section]);$i++)
-		{
-			$_SESSION['playListEntries' . $section][$i]->index = $i;
-		}
-		$value = $doc->createTextNode(("Success"));
-	}
-	else
-	{
-		$value = $doc->createTextNode("Failed. Index out of Range.");
-	}
-
-	$value = $root->appendChild($value);
-	echo $doc->saveHTML();
-
-}
-
 function cmp_index($a, $b)
 {
 	if ($a->index == $b->index) {
@@ -2245,21 +1609,6 @@ function universe_cmp($a, $b)
         return 0;
     }
     return ($a->startAddress < $b->startAddress) ? -1 : 1;
-}
-
-function GetVideoInfo()
-{
-	$filename = $_GET['filename'];
-	check($filename, "filename", __FUNCTION__);
-
-	header('Content-type: text/plain');
-
-	global $settings;
-	$videoInfo = "";
-	exec("omxplayer -i '" . $settings['videoDirectory'] . "/" . $filename . "' 2>&1", $info);
-	$videoInfo .= implode("\n", $info);
-
-	echo $videoInfo;
 }
 
 function GetFile()
@@ -2364,6 +1713,7 @@ function GetZip()
         "channelremap",
         "config/channeloutputs.json",
         //new v2 config files
+        "config/schedule.json",
         "config/outputprocessors.json",
         "config/co-other.json",
         "config/co-pixelStrings.json",
@@ -2373,7 +1723,6 @@ function GetZip()
         "config/model-overlays.json",
         //
         "pixelnetDMX",
-        "schedule",
         "settings",
         "universes"
     );

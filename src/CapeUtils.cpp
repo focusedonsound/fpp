@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <iostream>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <array>
@@ -29,9 +30,11 @@
 
 #include <fstream>
 
+#include <pwd.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/reboot.h>
 #include <fcntl.h>
 
 #include <libgen.h>
@@ -39,7 +42,6 @@
 #include <dirent.h>
 
 #include <jsoncpp/json/json.h>
-
 
 #ifdef PLATFORM_BBB
 #define I2C_DEV 2
@@ -95,6 +97,23 @@ static void put_file_contents(const std::string &path, const uint8_t *data, int 
     FILE *f = fopen(path.c_str(), "wb");
     fwrite(data, 1, len, f);
     fclose(f);
+
+    struct passwd *pwd = getpwnam("fpp");
+    chown(path.c_str(), pwd->pw_uid, pwd->pw_gid);
+
+    mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH;
+    chmod(path.c_str(), mode);
+}
+static uint8_t *get_file_contents(const std::string &path, int &len) {
+    FILE *fp = fopen(path.c_str(), "rb");
+    fseek(fp, 0L, SEEK_END);
+    len = ftell(fp);
+    fseek(fp, 0L, SEEK_SET);
+
+    uint8_t *data = (uint8_t*)malloc(len);
+    fread(data, 1, len, fp);
+    fclose(fp);
+    return data;
 }
 
 static bool waitForI2CBus(int i2cBus) {
@@ -194,10 +213,105 @@ static void getFileList(const std::string &basepath, const std::string &path, st
     }
 }
 
-static void copyIfNotExist(const std::string &src, const std::string &target) {
-    if (file_exists(target)) {
+static void disableOutputs(Json::Value &disables) {
+    for (int x = 0; x < disables.size(); x++) {
+        std::string file = disables[x]["file"].asString();
+        std::string type = disables[x]["type"].asString();
+        
+        std::string fullFile = "/home/fpp/media/" + file;
+        if (file_exists(fullFile)) {
+            Json::Value result;
+            Json::CharReaderBuilder builder;
+            Json::CharReader *reader = builder.newCharReader();
+            std::string errors;
+            std::ifstream istream(fullFile);
+            std::stringstream buffer;
+            buffer << istream.rdbuf();
+            istream.close();
+            
+            std::string str = buffer.str();
+            bool success = reader->parse(str.c_str(), str.c_str() + str.size(), &result, &errors);
+            if (success) {
+                bool changed = false;
+                if (result.isMember("channelOutputs")) {
+                    for (int co = 0; co < result["channelOutputs"].size(); co++) {
+                        if (result["channelOutputs"][co]["type"].asString() == type) {
+                            if (result["channelOutputs"][co]["enabled"].asInt() == 1) {
+                                result["channelOutputs"][co]["enabled"] = 0;
+                                changed = true;
+                            }
+                        }
+                    }
+                }
+                if (changed) {
+                    Json::StreamWriterBuilder wbuilder;
+                    std::string resultStr = Json::writeString(wbuilder, result);
+                    put_file_contents(fullFile, (const uint8_t*)resultStr.c_str(), resultStr.size());
+                }
+            }
+        }
+    }
+}
+static void processBootConfig(Json::Value &bootConfig) {
+#if defined(PLATFORM_PI)
+    const std::string fileName = "/boot/config.txt";
+#elif defined(PLATFORM_BBB)
+    const std::string fileName = "/boot/uEnv.txt";
+#else
+    //unknown platform
+    const std::string fileName;
+#endif
+
+    if (fileName.empty())
+        return;
+
+    int len = 0;
+    uint8_t *data = get_file_contents(fileName, len);
+    if (len == 0) {
+        remove("/.fppcapereboot");
         return;
     }
+    std::string current = (char *)data;
+    std::string orig = current;
+    if (bootConfig.isMember("remove")) {
+        for (int x = 0; x < bootConfig["remove"].size(); x++) {
+            std::string v = bootConfig["remove"][x].asString();
+            size_t pos = std::string::npos;
+            while ((pos  = current.find(v) )!= std::string::npos) {
+                // If found then erase it from string
+                current.erase(pos, v.length());
+            }
+        }
+    }
+    if (bootConfig.isMember("append")) {
+        for (int x = 0; x < bootConfig["append"].size(); x++) {
+            std::string v = bootConfig["append"][x].asString();
+            size_t pos = current.find(v);
+            if (pos == std::string::npos) {
+                // If not  found then append it
+                printf("Adding config option: %s\n", v.c_str());
+                current += "\n";
+                current += v;
+                current += "\n";
+            }
+        }
+    }
+    if (current != orig) {
+        put_file_contents(fileName, (const uint8_t*)current.c_str(), current.size());
+        sync();
+        if (!file_exists("/.fppcapereboot")) {
+            const uint8_t data[2] = {32, 0};
+            put_file_contents("/.fppcapereboot", data, 1);
+            sync();
+            setuid(0);
+            reboot(RB_AUTOBOOT);
+            exit(0);
+        }
+    } else {
+        remove("/.fppcapereboot");
+    }
+}
+static void copyFile(const std::string &src, const std::string &target) {
     int s, t;
     s = open(src.c_str(), O_RDONLY);
     if (s == -1) {
@@ -226,7 +340,12 @@ static void copyIfNotExist(const std::string &src, const std::string &target) {
         write(t, buf, l);
     }
 }
-
+static void copyIfNotExist(const std::string &src, const std::string &target) {
+    if (file_exists(target)) {
+        return;
+    }
+    copyFile(src, target);
+}
 bool fpp_detectCape() {
     int bus = I2C_DEV;
     waitForI2CBus(bus);
@@ -328,7 +447,8 @@ bool fpp_detectCape() {
             switch (flag) {
                 case 0:
                 case 1:
-                case 2: {
+                case 2:
+                case 3: {
                     int l = fread(buffer, 1, flen, file);
                     put_file_contents(path, buffer, flen);
                     char *s1 = strdup(path.c_str());
@@ -340,6 +460,10 @@ bool fpp_detectCape() {
                         unlink(path.c_str());
                     } else if (flag == 2) {
                         std::string cmd = "cd " + dir + "; tar -xzf " + path + " 2>&1";
+                        exec(cmd);
+                        unlink(path.c_str());
+                    } else if (flag == 3) {
+                        std::string cmd = "cd " + dir + "; tar -xjf " + path + " 2>&1";
                         exec(cmd);
                         unlink(path.c_str());
                     }
@@ -392,11 +516,20 @@ bool fpp_detectCape() {
     // if the cape-info has default settings and those settings are not already set, set them
     // also put the serialNumber into the cape-info for display
     if (file_exists("/home/fpp/media/tmp/cape-info.json")) {
+        // We would prefer to use LoadJsonFromFile() here, but we want to
+        // keep fppcapedetect small and using the helper would mean pulling
+        // in common.o and other dependencies.
         Json::Value result;
-        Json::Reader reader;
+        Json::CharReaderBuilder builder;
+        Json::CharReader *reader = builder.newCharReader();
+        std::string errors;
         std::ifstream istream("/home/fpp/media/tmp/cape-info.json");
-        bool success = reader.parse(istream, result);
+        std::stringstream buffer;
+        buffer << istream.rdbuf();
         istream.close();
+
+        std::string str = buffer.str();
+        bool success = reader->parse(str.c_str(), str.c_str() + str.size(), &result, &errors);
         if (success) {
             for (auto kv : extras) {
                 result[kv.first] = kv.second;
@@ -431,6 +564,12 @@ bool fpp_detectCape() {
                     }
                 }
             }
+            if (result.isMember("bootConfig")) {
+                //if the cape requires changes/update to config.txt (Pi) or uEnv.txt (BBB)
+                //we need to process them and see if we have to apply the changes and reboot or not
+                processBootConfig(result["bootConfig"]);
+            }
+
             if (result.isMember("removeSettings")) {
                 if (lines.empty()) {
                     readSettingsFile(lines);
@@ -447,14 +586,52 @@ bool fpp_detectCape() {
                     }
                 }
             }
+            if (result.isMember("modules")) {
+                //if the cape requires kernel modules, load them at this
+                //time so they will be available later
+                for (int x = 0; x < result["modules"].size(); x++) {
+                    std::string v = "/sbin/modprobe " + result["modules"][x].asString();
+                    exec(v.c_str());
+                }
+            }
+            if (result.isMember("copyFiles")) {
+                //if the cape requires certain files copied into place (asoundrc for example)
+                for (auto src : result["copyFiles"].getMemberNames()) {
+                    std::string target = result["copyFiles"][src].asString();
+                    
+                    if (src[0] != '/') {
+                        src = "/home/fpp/media/" + src;
+                    }
+                    if (target[0] != '/') {
+                        target = "/home/fpp/media/" + target;
+                    }
+                    copyFile(src, target);
+                }
+            }
+            if (result.isMember("i2cDevices")) {
+                //if the cape has i2c devices on it that need to be registered, load them at this
+                //time so they will be available later
+                for (int x = 0; x < result["i2cDevices"].size(); x++) {
+                    
+                    std::string v = result["i2cDevices"][x].asString();
+
+                    std::string newDevFile = string_sprintf("/sys/bus/i2c/devices/i2c-%d/new_device", bus);
+                    int f = open(newDevFile.c_str(), O_WRONLY);
+                    std::string newv = string_sprintf("%s", v.c_str());
+                    write(f, newv.c_str(), newv.size());
+                    close(f);
+                }
+            }
+            if (result.isMember("disableOutputs")) {
+                disableOutputs(result["disableOutputs"]);
+            }
             if (settingsChanged) {
                 writeSettingsFile(lines);
             }
 
-            std::ofstream ostream("/home/fpp/media/tmp/cape-info.json");
-            Json::StyledWriter writer;
-            ostream << writer.write(result);
-            ostream.close();
+            Json::StreamWriterBuilder wbuilder;
+            std::string resultStr = Json::writeString(wbuilder, result);
+            put_file_contents("/home/fpp/media/tmp/cape-info.json", (const uint8_t*)resultStr.c_str(), resultStr.size());
         } else {
             printf("Failed to parse cape-info.json\n");
         }

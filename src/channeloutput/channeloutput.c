@@ -45,7 +45,6 @@
 
 //old style that still need porting
 #include "FPD.h"
-#include "Triks-C.h"
 
 #include "processors/OutputProcessor.h"
 
@@ -207,7 +206,6 @@ static std::map<std::string, std::string> OUTPUT_REMAPS = {
  */
 int InitializeChannelOutputs(void) {
 	Json::Value root;
-	Json::Reader reader;
 	int i = 0;
 
 	channelOutputFrame = 0;
@@ -242,10 +240,10 @@ int InitializeChannelOutputs(void) {
 	// FIXME, build this list dynamically
 	const char *configFiles[] = {
         "/config/co-universes.json",
-		"/config/channeloutputs.json",
 		"/config/co-other.json",
 		"/config/co-pixelStrings.json",
         "/config/co-bbbStrings.json",
+        "/config/channeloutputs.json",
 		NULL
 		};
 
@@ -264,15 +262,7 @@ int InitializeChannelOutputs(void) {
 
 		if (FileExists(filename))
 		{
-			std::ifstream t(filename);
-			std::stringstream buffer;
-
-			buffer << t.rdbuf();
-
-			std::string config = buffer.str();
-
-			bool success = reader.parse(buffer.str(), root);
-			if (!success)
+			if (!LoadJsonFromFile(filename, root))
 			{
 				LogErr(VB_CHANNELOUT, "Error parsing %s\n", filename);
 				return 0;
@@ -310,10 +300,6 @@ int InitializeChannelOutputs(void) {
                     //for LED matrices, the driver is determined by the subType
                     libnamePfx = "matrix-";
                     type = outputs[c]["subType"].asString();
-                // NOW some platform or config specific Channel Outputs
-				} else if (type == "Triks-C") {
-					channelOutputs[i].outputOld = &TriksCOutput;
-					ChannelOutputJSON2CSV(outputs[c], csvConfig);
                 } else if (OUTPUT_REMAPS.find(type) != OUTPUT_REMAPS.end()) {
                     type = OUTPUT_REMAPS[type];
                 }
@@ -508,7 +494,7 @@ void StopOutputThreads(void) {
 void CloseChannelOutputs(void) {
 	int i = 0;
 
-	for (i = 0; i < channelOutputCount; i++) {
+	for (i = channelOutputCount-1; i >= 0; i--) {
 		if (channelOutputs[i].outputOld)
 			channelOutputs[i].outputOld->close(channelOutputs[i].privData);
 		else if (channelOutputs[i].output)
@@ -518,7 +504,7 @@ void CloseChannelOutputs(void) {
 			free(channelOutputs[i].privData);
 	}
     
-    for (i = 0; i < channelOutputCount; i++) {
+    for (i = channelOutputCount-1; i >= 0; i--) {
         if (channelOutputs[i].output) {
             delete channelOutputs[i].output;
             channelOutputs[i].output = NULL;
@@ -533,7 +519,6 @@ void CloseChannelOutputs(void) {
 int LoadOutputProcessors(void) {
 	char filename[1024];
 	Json::Value root;
-	Json::Reader reader;
 
 	strcpy(filename, getMediaDirectory());
 	strcat(filename, "/config/outputprocessors.json");
@@ -543,15 +528,7 @@ int LoadOutputProcessors(void) {
 
 	LogDebug(VB_CHANNELOUT, "Loading Output Processors.\n");
 
-	std::ifstream t(filename);
-	std::stringstream buffer;
-
-	buffer << t.rdbuf();
-
-	std::string config = buffer.str();
-
-	bool success = reader.parse(buffer.str(), root);
-	if (!success)
+	if (!LoadJsonFromFile(filename, root))
 	{
 		LogErr(VB_CHANNELOUT, "Error parsing %s\n", filename);
 		return 0;

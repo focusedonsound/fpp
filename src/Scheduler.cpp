@@ -30,8 +30,7 @@
 #include <sys/types.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include "boost/date_time/gregorian/gregorian.hpp"
+#include <chrono>
 
 #include "command.h"
 #include "commands/Commands.h"
@@ -42,6 +41,9 @@
 #include "Scheduler.h"
 #include "settings.h"
 #include "SunSet.h"
+
+#define SCHEDULE_FILE     "/home/fpp/media/config/schedule.json"
+#define SCHEDULE_FILE_CSV "/home/fpp/media/schedule"
 
 Scheduler *scheduler = NULL;
 
@@ -77,6 +79,8 @@ Scheduler::Scheduler()
 	m_runThread(0),
 	m_threadIsRunning(0)
 {
+	ConvertScheduleFile();
+
 	RegisterCommands();
 
 	m_lastProcTime = time(NULL);
@@ -206,8 +210,12 @@ std::string Scheduler::GetPlaylistThatShouldBePlaying(int &repeat)
 	localtime_r(&currTime, &now);
 
     if (playlist->getPlaylistStatus() != FPP_STATUS_IDLE) {
-        repeat = m_Schedule[m_currentSchedulePlaylist.ScheduleEntryIndex].repeat;
-		return m_Schedule[m_currentSchedulePlaylist.ScheduleEntryIndex].playlist;
+        if (m_currentSchedulePlaylist.ScheduleEntryIndex != SCHEDULE_INDEX_INVALID) {
+            repeat = m_Schedule[m_currentSchedulePlaylist.ScheduleEntryIndex].repeat;
+            return m_Schedule[m_currentSchedulePlaylist.ScheduleEntryIndex].playlist;
+        } else {
+            return "";
+        }
     }
 
 	int nowWeeklySeconds = GetWeeklySeconds(now.tm_wday, now.tm_hour, now.tm_min, now.tm_sec);
@@ -417,15 +425,14 @@ void Scheduler::SetScheduleEntrysWeeklyStartAndEndSeconds(ScheduleEntry *entry)
 	}
 
 	// Some variables needed for odd/even day calculations
-	std::string FPPEpochStr("2013-07-15");
-	boost::gregorian::date FPPEpoch(boost::gregorian::from_simple_string(FPPEpochStr));
-	boost::gregorian::date today = boost::gregorian::day_clock::local_day();
-	boost::gregorian::days bDaysSince = today - FPPEpoch;
-	int daysSince = bDaysSince.days();
+    struct std::tm FPPEpoch = {0,0,0,15,6,113}; //2013-07-15
+    std::time_t FPPEpochTimeT = std::mktime(&FPPEpoch);
+    std::time_t currTime = std::time(nullptr);
+    double difference = std::difftime(currTime, FPPEpochTimeT) / (60 * 60 * 24);
+	int daysSince = difference;
 	int oddSunday = 0;
 	int i = 0;
 
-	time_t currTime = time(NULL);
 	struct tm now;
 	localtime_r(&currTime, &now);
 
@@ -727,13 +734,43 @@ void Scheduler::PlayListStopCheck(void)
   }
 }
 
+void Scheduler::ConvertScheduleFile(void)
+{
+    if ((!FileExists(SCHEDULE_FILE)) &&
+        (FileExists(SCHEDULE_FILE_CSV))) {
+        FILE *fp;
+        char buf[512];
+        char *s;
+        int scheduleEntryCount = 0;
+        int day;
+        Json::Value newSchedule(Json::arrayValue);
+
+        LogInfo(VB_SCHEDULE, "Converting Schedule CSV to JSON\n");
+        fp = fopen(SCHEDULE_FILE_CSV, "r");
+        if (fp == NULL)
+        {
+            return;
+        }
+
+        while(fgets(buf, 512, fp) != NULL)
+        {
+            ScheduleEntry scheduleEntry;
+            scheduleEntry.LoadFromString(buf);
+
+            Json::Value e = scheduleEntry.GetJson();
+            newSchedule.append(e);
+        }
+
+        fclose(fp);
+
+        if (SaveJsonToFile(newSchedule, SCHEDULE_FILE))
+            unlink(SCHEDULE_FILE_CSV);
+    }
+}
+
 void Scheduler::LoadScheduleFromFile(void)
 {
-  FILE *fp;
-  char buf[512];
-  char *s;
-  int scheduleEntryCount = 0;
-  int day;
+  LogInfo(VB_SCHEDULE, "Loading Schedule from %s\n", SCHEDULE_FILE);
 
   m_loadSchedule = false;
   m_lastLoadDate = GetCurrentDateInt();
@@ -741,16 +778,10 @@ void Scheduler::LoadScheduleFromFile(void)
   std::unique_lock<std::mutex> lock(m_scheduleLock);
   m_Schedule.clear();
 
-  LogInfo(VB_SCHEDULE, "Loading Schedule from %s\n",getScheduleFile());
-  fp = fopen((const char *)getScheduleFile(), "r");
-  if (fp == NULL) 
-  {
-		return;
-  }
-  while(fgets(buf, 512, fp) != NULL)
-  {
+  Json::Value sch = LoadJsonFromFile(SCHEDULE_FILE);
+  for (int i = 0; i < sch.size(); i++) {
 	ScheduleEntry scheduleEntry;
-	scheduleEntry.LoadFromString(buf);
+	scheduleEntry.LoadFromJson(sch[i]);
 
 	// Check for sunrise/sunset flags
 	if (scheduleEntry.startHour == 25)
@@ -779,7 +810,6 @@ void Scheduler::LoadScheduleFromFile(void)
     SetScheduleEntrysWeeklyStartAndEndSeconds(&scheduleEntry);
     m_Schedule.push_back(scheduleEntry);
   }
-  fclose(fp);
 
   lock.unlock();
 
@@ -1157,7 +1187,7 @@ int Scheduler::ExtendRunningSchedule(int seconds)
     if (m_currentSchedulePlaylist.endWeeklySeconds < 0)
         m_currentSchedulePlaylist.endWeeklySeconds += 7 * 24 * 60 * 60;
 
-    if (m_currentSchedulePlaylist.endWeeklySeconds > (7 * 24 * 60 * 60))
+    if (m_currentSchedulePlaylist.endWeeklySeconds >= (7 * 24 * 60 * 60))
         m_currentSchedulePlaylist.endWeeklySeconds -= 7 * 24 * 60 * 60;
 
     m_currentSchedulePlaylist.actualEndTime += seconds;
@@ -1176,7 +1206,7 @@ public:
 class ExtendScheduleCommand : public ScheduleCommand {
 public:
     ExtendScheduleCommand(Scheduler *s) : ScheduleCommand("Extend Schedule", s) {
-        args.push_back(CommandArg("Seconds", "seconds", "Seconds").setRange(-12 * 60 * 60, 12 * 60 * 60).setDefaultValue("300"));
+        args.push_back(CommandArg("Seconds", "int", "Seconds").setRange(-12 * 60 * 60, 12 * 60 * 60).setDefaultValue("300").setAdjustable());
     }
 
     virtual std::unique_ptr<Command::Result> run(const std::vector<std::string> &args) override {

@@ -3,7 +3,7 @@
 	font-size: 14px;
 	text-align: center;
 	#background: rgb(240, 240, 240);
-	width: 1200px;
+	width: 95%;
 	margin-left: auto;
 	margin-right: auto;
 }
@@ -29,7 +29,11 @@
 	text-align: center;
 	text-shadow: 0 1px 0 #eee;
 	width: 90px;
-	height: 20px;
+	height: 18px;
+}
+
+.smallButton {
+    width: 60px;
 }
 
 .buttons:hover
@@ -79,7 +83,7 @@
 	text-align: center;
 	text-shadow: 0 1px 0 #eee;
 	width: 90px;
-	height: 20px;
+	height: 18px;
 }
 
 .disableButtons:active
@@ -99,13 +103,13 @@
 
 #bodyWrapper
 {
-	width: 1200px;
+    width: 95%;
 	margin-left: auto;
 	margin-right: auto;
 	background: rgb(240, 240,240);
 }
 
-#daemoncontrol, #playerstats
+#playerstats
 {
 	background: rgb(240, 240, 240);
 	margin:10px;
@@ -150,10 +154,99 @@
  	z-index: 10000;
 }	
 
+.statusDiv {
+    width: 100%;
+}
+
+.statusHr {
+    clear: both;
+}
+
+#daemonControl td {
+    white-space: nowrap;
+}
+
+.sensorTable td {
+    white-space: nowrap;
+}
+
+.schedulerExtend {
+    text-align: center;
+}
+
+.dayMask input {
+    margin: 1px;
+}
+
+.statusTable th {
+    text-align: left;
+    padding-right: 10px;
+}
+
+.statusTable td {
+    padding-right: 10px;
+}
+
+.statusBoxLeft {
+    float: left;
+    width: 75%;
+}
+
+.statusBoxRight {
+    float: left;
+    width: 25%;
+}
+
+.settingsTableWrapper td {
+    padding: 0px;
+    vertical-align: top;
+    white-space: nowrap;
+}
+
+.settingsTable {
+	border-collapse: collapse;
+    border-spacing: 0px;
+}
+
+.settingsTable th {
+    padding: 0px;
+    padding-right: 5px;
+    padding-bottom: 2px;
+    white-space: nowrap;
+    text-align: left;
+    vertical-align: text-top;
+    font-weight: normal;
+}
+
+.settingsTable td {
+    padding: 0px;
+    padding-right: 5px;
+    padding-bottom: 2px;
+    vertical-align: text-top;
+}
+
+.settingsTable td input {
+    vertical-align: text-top;
+}
+
+.settingsTable td img {
+    vertical-align: text-top;
+}
+
+.settingsGroupTable th {
+    padding-left: 15px;
+}
+
+.pageContent {
+    width: 95%;
+    margin-top: 0;
+	margin-left: auto;
+	margin-right: auto;
+}
 
 .settings
 {
-	width: 1100px;
+    width: 95%;
 	margin-left: auto;
 	margin-right: auto;
 }
@@ -223,11 +316,11 @@ html
 
 #divEthernet, #divEffectLibrary{
 	min-height: 200px;
-	width: 383px;
+	width: 483px;
 	float: left;
 }
 
-#divSeqData, #divMusicData, #divVideoData, #divEffectsData, #divScriptsData, #divLogsData, #divUploadsData {
+#divSeqData, #divMusicData, #divVideoData, #divImageData, #divEffectsData, #divScriptsData, #divLogsData, #divUploadsData {
 	overflow: auto;
 	min-height: 120px;
 	max-height: 120px;
@@ -239,7 +332,7 @@ html
 	display: table;
 	min-height: 200px;
 	max-height: 300px;
-	width: 383px;
+	width: 483px;
 	float: right;
 }
 
@@ -283,9 +376,9 @@ legend
 	font-weight: bold;
 	padding: 0.1em 0.4em;
 	text-align: left;
-	-moz-border-radius: 5px;
-	border-radius: 5px;
-	-webkit-border-radius: 5px;
+	-moz-border-radius: 6px;
+	border-radius: 6px;
+	-webkit-border-radius: 6px;
 	margin-left: auto;
 	margin-right: auto;
 	border: solid 2px rgb(0,0,0);
@@ -293,21 +386,22 @@ legend
 
 fieldset
 {
-	-moz-border-radius:5px;
-    border-radius: 5px;
-    -webkit-border-radius: 5px;
+    border: solid 2px;
+	-moz-border-radius:6px;
+    border-radius: 6px;
+    -webkit-border-radius: 6px;
 }
 .header{padding: 10px; }
 .headerLeft , .headerRight
 {
-	width:200px;
+	width:20%;
 	text-align:center;
 	float:left;
 }
 
 .headerCenter
 {
-	width:770px;
+	width: 60%;
 	text-align:center;
 	float:left;
 }
@@ -315,17 +409,22 @@ fieldset
 .siteName{font-size: 200%; padding-top: 13px; }
 
 
-.colPlaylistNumberDrag {
+.colPlaylistNumberDrag, .colNumberDrag {
 	background-image: url(../images/vertdrag.png);
 	background-repeat:no-repeat;
 	background-size:7px 14px;
 	background-position:0 2px;
-	padding-left:20px;
+	padding-left:20px !important;
 }
-.colPlaylistNumber {
-	text-align:right;
-	padding-right:0px;
-//	width: 5%;
+.colPlaylistNumberHeader, .colNumberHeader {
+    text-align: center;
+}
+.colPlaylistNumber, .colNumber {
+    text-align:right;
+    vertical-align: top;
+    padding: 1px;
+    padding-right:0px;
+    width: 2%;
 }
 .colPlaylistType {
 	text-align:left;
@@ -333,7 +432,7 @@ fieldset
 //	width: 10%;
 }
 .colPlaylistData1 {
-	text-align:left;
+	text-align:center;
 	padding-left:5px;
 //	width: 40%;
 }
@@ -342,6 +441,8 @@ fieldset
 	padding-left:5px;
 //	width: 40%;
 }
+
+
 
 .volumeButton {
 	float: left;
@@ -403,59 +504,163 @@ fieldset
 	border-radius: 25px;
 }
 
-#statusPlaylistContents{
-	height:220px;
-	min-height:220px;
-	max-height:220px;
-	overflow:auto
+.playlistRow {
+    border: thin solid;
 }
 
-#statusPlaylistContents table {
+.playlistRow td {
+    padding: 1px;
+    padding-right: 5px;
+}
+
+.PlaylistRowPlaying{
+	background:#D1E0FF;
+}
+
+.playlistRowNumber {
+    padding: 1px;
+}
+
+.psi {
+    width: 100%;
+    overflow: hidden;
+    padding: 0px;
+    display: flex;
+}
+
+.psiHeader {
+    text-align: left;
+    font-weight: bold;
+    padding: 0px;
+    padding-right: 5px;
+    vertical-align: top;
+    white-space: nowrap;
+    width: 10%;
+}
+
+.psiDuration {
+    padding: 0px;
+    vertical-align: top;
+    width: 10%;
+}
+
+.psiDurationSeconds {
+    display: none;
+}
+
+.psiDataSimple {
+    flex: 1;
+    padding: 0px;
+    vertical-align: top;
+    width: 80%;
+}
+
+.psiData {
+    flex: 1;
+    padding: 0px;
+    vertical-align: top;
+    width: 80%;
+    display: none;
+}
+
+.psiDetailsWrapper {
+    width: 100%;
+    float: left;
+}
+
+.psiDetails {
+    width: 100%;
+    overflow: hidden;
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.psiDetailsArg {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.psiDetailsHeader {
+    text-align: left;
+    font-weight: bold;
+    padding: 0px;
+    padding-right: 5px;
+    vertical-align: top;
+    white-space: nowrap;
+    width: 15%;
+}
+
+.psiDetailsData {
+    flex: 1;
+    padding: 0px;
+    vertical-align: top;
+    width: 74%;
+}
+
+.psiDetailsLF {
+    flex-basis: 100%;
+    height: 0px;
+}
+
+#playlistDetailsContents{
+	height:250px;
+	min-height:250px;
+//	max-height:220px;
+	overflow: auto;
+}
+
+#playlistDetailsContents table {
 	border-collapse:collapse;
 } 
 
-#eventListContents, #effectListContents{
-	height:120px;
-	min-height:120px;
-	max-height:120px;
-	overflow:auto
+.playlistDetailsSelect {
+    max-width: 300px;
 }
 
-#statusPlaylist, #eventList, #effectList, #effectLibrary, #runningEffects{
-	border:thin solid;	
+.playlistDetailsSelect option {
+    overflow: hidden;
+    white-space: no-wrap;
+    text-overflow: ellipsis;
+}
+
+#playlistDetails, #effectList, .genericTableWrapper {
+	border: solid 2px;
 	margin-top: 5px;
-	-moz-border-radius: 5px;
-	border-radius: 5px;
-	-webkit-border-radius: 5px;
+	-moz-border-radius: 6px;
+	border-radius: 6px;
+	-webkit-border-radius: 6px;
 	min-height: 65px;
+    overflow: hidden;
 }
 
 #playerStatus{
 }
 
-.playerStatusHeader{
-    width: 1%;
-    white-space: nowrap;
-    padding-right: 15px;
-}
-.playerStatusLeft{
-	width: 70%;
-	float: left;
-}
-.playerStatusRight{
-	width: 30%;
-	float: left;
-}
-
-#tblStatusPlaylist {
+#tblPlaylistDetails {
 	 width:100%;
 }
 
-#tblStatusPlaylist tbody tr th{
+//.playlistEntriesBody > tr:nth-child(even) {
+//}
+
+//.playlistEntriesBody > tr:nth-child(odd) {
+//    background: #dddddd;
+//}
+
+.evenRow {
+    background: #F0F0F0;
+}
+
+.oddRow {
+    background: #ffffff;
+}
+
+.tblPlaylistDetailsHeader {
 	background: #aaaaaa;
 }
 
-#tblStatusPlaylistEntries{
+#tblPlaylistDetailsEntries{
 	 width:100%;
 	 border-collapse:collapse;
 }
@@ -473,9 +678,21 @@ fieldset
 	background:#CCC;
 }
 
-.playlistHeader, .eventListHeader, .effectListHeader{
+.playlistHeader {
 	background:#DDD;
 	text-align:center;
+}
+
+.playlistBoxLeft {
+    float: left;
+    min-width: 300px;
+    padding-right: 50px;
+    padding-bottom: 15px;
+}
+
+.playlistBoxRight {
+    float: left;
+    min-width: 300px;
 }
 
 .textRight{
@@ -492,16 +709,8 @@ fieldset
 	text-align:center;
 	}	
 
-.playlistSelectedEntry, .eventSelectedEntry, .effectSelectedEntry{
+.playlistSelectedEntry, .eventSelectedEntry, .effectSelectedEntry, .selectedTableRow {
 	background:#CCC;
-}
-
-.unselectable {
-   -moz-user-select: -moz-none;
-   -khtml-user-select: none;
-   -webkit-user-select: none;
-  -ms-user-select: none;
-   user-select: none;
 }
 
 
@@ -511,10 +720,6 @@ fieldset
 	background-repeat:no-repeat;
 	background-position: 4px 4px;
 }
-
-.PlaylistRowPlaying{
-	background:#D1E0FF;
-}	
 
 #MusicOptions{
 	display:none;
@@ -546,19 +751,29 @@ fieldset
   padding:10px;
 	border:thin solid;	
 	font-size:12px;
-	-moz-border-radius: 5px;
-	border-radius: 5px;
-	-webkit-border-radius: 5px;
+	-moz-border-radius: 6px;
+	border-radius: 6px;
+	-webkit-border-radius: 6px;
 }
 
-#bytesTransferred{
+.playlistItemCountLeadIn, .playlistItemCountMainPlaylist, .playlistItemCountLeadOut {
+    text-align: right;
+    padding-right: 5px;
+}
+
+.playlistDurationLeadIn, .playlistDurationMainPlaylist, .playlistDurationLeadOut {
+    text-align: right;
+    padding-left: 5px;
+}
+
+#bridgeModeInfo {
   margin:10px;
   padding:10px;
 	border:thin solid;	
 	font-size:12px;
-	-moz-border-radius: 5px;
-	border-radius: 5px;
-	-webkit-border-radius: 5px;
+	-moz-border-radius: 6px;
+	border-radius: 6px;
+	-webkit-border-radius: 6px;
 	min-height:200px;
 	text-align:center;
 	display:none;
@@ -599,8 +814,15 @@ fieldset
 	min-height: 20px;
 }
 
+.playlistEditButton, .playlistDetailsEditButton, .genericButton {
+    margin-right: 10px;
+    margin-top: 5px;
+}
+
 .pl_title {
 	font-size: larger;
+    text-align: center;
+    min-width: 300px;
 }
 
 .title {
@@ -636,13 +858,8 @@ fieldset
 	height: 60px;
 }
 
-.channelOutputTable {
-	width: 100%;
-}
-
 #fileManager, #channelOutputManager, #channelTester, .fppTabs {
-	min-width: 1068px;
-	width: 1160px;
+	min-width: 955px;
 	margin-left: auto;
 	margin-right: auto;
 }
@@ -665,14 +882,31 @@ fieldset
 	border: 2px solid #000000;
 }
 
+.genericTableContents {
+	min-height:400px;
+	overflow: auto;
+}
+
+.fppTable {
+    border-collapse: collapse;
+}
+
+.fppTable > tbody > tr {
+//    border: thin solid;
+}
+
+.fppTable > tbody > tr > td {
+    vertical-align: top;
+}
+
 .fppTableWrapper {
-	border:thin solid;
-	font-size:12px;
+	border: solid 2px;
 	margin-top: 5px;
-	-moz-border-radius: 5px;
-	border-radius: 5px;
-	-webkit-border-radius: 5px;
+	-moz-border-radius: 6px;
+	border-radius: 6px;
+	-webkit-border-radius: 6px;
 	min-height: 65px;
+    overflow: hidden;
 
 	-moz-user-select: -moz-none;
 	-khtml-user-select: none;
@@ -681,14 +915,84 @@ fieldset
 	user-select: none;
 }
 
-.fppTableHeader {
-	background:#DDD;
-	text-align:center;
-	font-weight: bold;
+.fppTableWrapperAsTable {
+    display: table;
+}
+
+.fppTableWrapper input {
+	-moz-user-select: -moz-auto;
+	-khtml-user-select: auto;
+	-webkit-user-select: auto;
+	-ms-user-select: auto;
+	user-select: auto;
+}
+
+.fppTableRowTemplate {
+    display: none;
+}
+
+.fppTableContents {
+}
+
+.fppTableContents > table {
+    background: #F0F0F0;
+    border: thin;
+    border-color:#333;
+    border-spacing: 0px;
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.fullWidth {
+    width: 100%;
+}
+
+.fppTableContents > table > thead > tr, .fppTableContents > table > tbody > tr {
+    border: thin solid;
+    border-color: #CCC;
+}
+
+.fppTableContents > table > thead > tr > th {
+    vertical-align: bottom;
+    text-align: center;
+    color: #000000;
+    border-left: thin solid #888888;
+    border-right: thin solid #888888;
+    border-bottom: thin solid #888888;
+    font-size: 12pt;
+    font-family: Verdana,Arial,sans-serif;
+    background-color:#CCC;
+}
+
+.fppTableContents > table > tbody > tr > td {
+    font-size: 12pt;
+    padding-left: 1px;
+    padding-right: 5px;
+    padding-top: 1px;
+    padding-bottom: 1px;
 }
 
 .fppTableSelectedEntry {
 	background:#CCC;
+}
+
+.universeTable td {
+    text-align: center;
+}
+
+.universeTable input[type=text] {
+    text-align: center;
+    width: 100%;
+}
+
+.universeTable input[type=number] {
+    text-align: center;
+    width: 100%;
+}
+
+.serialOutputContents > table {
+    width: 120px;
+    text-align: center;
 }
 
 #restoreSuccessFlag{
@@ -738,6 +1042,24 @@ pre
 	cursor:pointer;
 }
 
+.addButton {
+    background-image: url(../images/addicon.gif);
+    width: 12px;
+    height: 12px;
+    display: block;
+    background-size: 12px 12px;
+    background-repeat: no-repeat;
+}
+
+.deleteButton {
+    background-image: url(../images/deleteicon.gif);
+    width: 12px;
+    height: 12px;
+    display: block;
+    background-size: 12px 12px;
+    background-repeat: no-repeat;
+}
+
 .pluginTitle
 {
 	font-weight: bold;
@@ -747,7 +1069,7 @@ pre
 
 .pluginTable
 {
-	width: 800px;
+	width: 100%;
 }
 
 .pluginTable td
@@ -900,7 +1222,41 @@ td.bgDarkOrange {
 	font-weight: bold;
 }
 
-@media screen and (max-width: 950px) {
+.jsString { color: blue; }
+.jsNumber { color: black; }
+.jsBoolean { color: darkorange; }
+.jsNull { color: magenta; }
+.jsKey { color: red; }
+
+@media screen and (max-width: 980px) {
+    #bodyWrapper
+    {
+        width: 96%;
+    }
+}
+
+@media screen and (max-width: 960px) {
+    #bodyWrapper
+    {
+        width: 97%;
+    }
+}
+
+@media screen and (max-width: 940px) {
+    #bodyWrapper
+    {
+        width: 98%;
+    }
+}
+
+@media screen and (max-width: 920px) {
+    #bodyWrapper
+    {
+        width: 99%;
+    }
+}
+
+@media screen and (max-width: 900px) {
 	html {
 		background: #f0f0f0;
 	}
@@ -935,3 +1291,28 @@ td.bgDarkOrange {
 	#fppMenu li ul li {
 		background: #555; }
 }
+
+.selectable {
+   -moz-user-select: -moz-auto;
+   -khtml-user-select: auto;
+   -webkit-user-select: auto;
+   -ms-user-select: auto;
+   user-select: auto;
+}
+
+.unselectable {
+   -moz-user-select: -moz-none;
+   -khtml-user-select: none;
+   -webkit-user-select: none;
+   -ms-user-select: none;
+   user-select: none;
+}
+
+.hidden {
+    display: none;
+}
+
+.ui-datepicker {
+    z-index: 9999 !important;
+}
+

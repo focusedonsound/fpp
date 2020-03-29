@@ -79,6 +79,19 @@ function getFileCount($dir)
 
   return $i;
 }
+    
+function getFileList($dir, $ext)
+{
+  $i = array();
+  if ($handle = opendir($dir)) {
+      while (($file = readdir($handle)) !== false) {
+          if (!in_array($file, array('.', '..')) && !is_dir($dir . $file) && strtolower(substr($file, strrpos($file, '.') + 1)) == $ext) {
+              array_push($i, $file);
+          }
+      }
+  }
+  return $i;
+}
 
 function PrintGitBranchOptions()
 {
@@ -98,7 +111,6 @@ function PrintGitBranchOptions()
     }
   }
 }
-
 ?>
 
 <head>
@@ -123,20 +135,11 @@ this.value = default_value;
 });
 });
 
-function ToggleAutoUpdate() {
-	if ($('#autoUpdateDisabled').is(':checked')) {
-		SetAutoUpdate(0);
-	} else {
-		SetAutoUpdate(1);
-	}
-}
-
-function ToggleDeveloperMode() {
-	if ($('#developerMode').is(':checked')) {
-		SetDeveloperMode(1);
-	} else {
-		SetDeveloperMode(0);
-	}
+function UpgradeOS() {
+    var os = $('#OSSelect').val();
+    if (confirm('Upgrade the OS using ' + os + '?\nThis can take a long time.')) {
+        location.href="upgradeOS.php?os=" + os;
+    }
 }
 
 </script>
@@ -204,23 +207,17 @@ a:visited {
           <table class='tblAbout'>
             <tr><td><b>Version Info</b></td><td>&nbsp;</td></tr>
             <tr><td>FPP Version:</td><td><? echo $fpp_version; ?></td></tr>
+            <tr><td>Platform:</td><td><?
+echo $settings['Platform'];
+if (($settings['Variant'] != '') && ($settings['Variant'] != $settings['Platform']))
+    echo " (" . $settings['Variant'] . ")";
+?></td></tr>
             <tr><td>FPP OS Build:</td><td><? echo $os_build; ?></td></tr>
             <tr><td>OS Version:</td><td><? echo $os_version; ?></td></tr>
 <? if (isset($serialNumber) && $serialNumber != "") { ?>
         <tr><td>Hardware Serial Number:</td><td><? echo $serialNumber; ?></td></tr>
 <? } ?>
             <tr><td>Kernel Version:</td><td><? echo $kernel_version; ?></td></tr>
-<? if (file_exists($mediaDirectory."/.developer_mode")) { ?>
-            <tr><td>Git Branch:</td><td><select id='gitBranch' onChange="ChangeGitBranch($('#gitBranch').val());">
-<? PrintGitBranchOptions(); ?>
-                </select></td></tr>
-<?
-   } else {
-?>
-            <tr><td>Git Branch:</td><td><? echo $git_branch; ?></td></tr>
-<?
-   }
-?>
             <tr><td>Local Git Version:</td><td>
 <?
   echo $git_version;
@@ -240,18 +237,17 @@ a:visited {
     echo " <font color='#FF0000'><a href='javascript:void(0);' onClick='GetGitOriginLog();'>Preview Changes</a></font>";
 ?>
                 </td></tr>
-            <tr><td>Disable Auto Update:</td><td><input type='checkbox' id='autoUpdateDisabled' onChange='ToggleAutoUpdate();'
-<? if (file_exists($mediaDirectory."/.auto_update_disabled")) { ?>
-            checked
-<? } ?>
-              >  <input type='button' value='Manual Update' onClick='location.href="manualUpdate.php";' class='buttons' id='ManualUpdate'></td></tr>
-<!--
-            <tr><td>Developer Mode:</td><td><input type='checkbox' id='developerMode' onChange='ToggleDeveloperMode();'
-<? if (file_exists($mediaDirectory."/.developer_mode")) { ?>
-            checked
-<? } ?>
-              ></td></tr>
--->
+            <tr><td>Update FPP:</td><td><input type='button' value='Update FPP' onClick='location.href="manualUpdate.php";' class='buttons' id='ManualUpdate'></td></tr>
+<?
+            $osUpdateFiles = getFileList($uploadDirectory, "fppos");
+            if (count($osUpdateFiles) > 0) {
+                echo "<tr><td>Upgrade OS:</td><td><select class='OSSelect' id='OSSelect'>\n";
+                foreach ($osUpdateFiles as $key => $value) {
+                    echo "<option value='" . $value . "'>" . $value . "</option>\n";
+                }
+                echo "</select>&nbsp;<input type='button' value='Upgrade OS' onClick='UpgradeOS();' class='buttons' id='OSUpgrade'></td></tr>";
+            }
+?>
             <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
             <tr><td><b>System Utilization</b></td><td>&nbsp;</td></tr>
             <tr><td>CPU Usage:</td><td><? printf( "%.2f", get_server_cpu_usage()); ?>%</td></tr>
@@ -302,6 +298,7 @@ a:visited {
     if (isSet($settings["cape-info"]))  {
         $currentCapeInfo = $settings["cape-info"];
     ?>
+        <br>
         <fieldset style="padding: 10px; border: 2px solid #000;">
         <legend>About Cape/Hat</legend>
         <div style="overflow: hidden; padding: 10px;">

@@ -56,20 +56,6 @@ var KNOWN_CAPES = {
 };
 </script>
 
-<style>
-.serialOutputTable {
-    background: #F0F0F0;
-    border-spacing: 0px;
-    border-collapse: collapse;
-}
-.serialOutputTable th {
-    vertical-align: bottom;
-}
-.serialOutputTable td {
-    text-align: center;
-}
-</style>
-
 <script>
 function MapPixelStringType(type) {
     return "BBB48String";
@@ -209,13 +195,13 @@ function HasSerial(subType) {
 function BBB48SerialTypeChanged() {
     if ($('#BBBSerialMode').val() == 'DMX') {
         $('#DMXNumChannelOutput').show();
-        $('#BBBSerial_Output').show();
+        ShowTableWrapper('BBBSerial_Output');
     } else if ($('#BBBSerialMode').val() == 'Pixelnet') {
         $('#DMXNumChannelOutput').hide();
-        $('#BBBSerial_Output').show();
+        ShowTableWrapper('BBBSerial_Output');
     } else {
         $('#DMXNumChannelOutput').hide();
-        $('#BBBSerial_Output').hide();
+        HideTableWrapper('BBBSerial_Output');
     }
 }
 
@@ -322,8 +308,8 @@ function BBB48StringExpansionTypeChanged(port) {
     var dt = $('#ExpansionType' + port);
     var val = parseInt(dt.val());
 
-    if (val == 0) {
-        //droping to standard... need to set everything to non-smart first
+    if (val == 0 || val == -1) {
+        //droping to standard/none... need to set everything to non-smart first
         for (var x = 0; x < num; x++) {
             BBB48StringDifferentialTypeChangedTo((port+x), 0);
         }
@@ -332,10 +318,20 @@ function BBB48StringExpansionTypeChanged(port) {
                 var tr = $('#ROW_RULER_DIFFERENTIAL_' + (port+x));
                 tr.remove();
             }
+            if (val == -1) {
+                $('#BBB48String_Output_0_' + (port+x) + '_0').hide();
+            } else {
+                $('#BBB48String_Output_0_' + (port+x) + '_0').show();
+            }
         }
+        
     } else {
         //going to differential, need to add receiver type selections
         for (var x = 0; x < num; x += 4) {
+            $('#BBB48String_Output_0_' + (port+x) + '_0').show();
+            $('#BBB48String_Output_0_' + (port+x+1) + '_0').show();
+            $('#BBB48String_Output_0_' + (port+x+2) + '_0').show();
+            $('#BBB48String_Output_0_' + (port+x+3) + '_0').show();
             var o = port + x;
             var str = "<tr id='ROW_RULER_DIFFERENTIAL_" +o + "'><td colSpan='2'><hr></td>";
             str += "<td></td>";
@@ -470,25 +466,37 @@ function populatePixelStringOutputs(data) {
                 $('#pixelOutputs').html("");
                 
                 var outputCount = GetBBB48StringRows();
-                
-                var str = "<table id='BBB48String' type='" + output.subType + "' ports='" + outputCount + "' class='outputTable'>";
+
+                var str = "";
+                str += "<div class='fppTableWrapper'>" +
+                    "<div class='fppTableContents'>";
+                str += "<table id='BBB48String' type='" + output.subType + "' ports='" + outputCount + "'>";
                 str += pixelOutputTableHeader();
                 str += "<tbody>";
 
+                var expansions = [];
                 var expansionType = 0;
                 var inExpansion = false;
+                var sourceOutputCount = output.outputCount;
+                if (output.outputs != null) {
+                    sourceOutputCount = output.outputs.length;
+                }
+                
                 for (var o = 0; o < outputCount; o++)
                 {
                     var port = {"differentialType" : 0, "expansionType" : 0};
                     var loops = 1;
-                    if (o < output.outputCount) {
+                    if (o < sourceOutputCount) {
                         port = output.outputs[o];
                     }
                     if (ShouldAddBreak(subType, o) || (o == 0 && IsDifferential(subType, o)) || IsDifferentialExpansion(inExpansion, expansionType, o)) {
                         if (IsExpansion(subType, o)) {
                             expansionType = port["expansionType"];
                             if (expansionType == null) {
-                                expansionType = 0;
+                                expansionType = data["defaultExpansionType"];
+                                if (expansionType == null) {
+                                    expansionType = 0;
+                                }
                             }
                             str += "<tr><td colSpan='2'><hr></td>";
                             str += "<td></td>";
@@ -496,10 +504,14 @@ function populatePixelStringOutputs(data) {
                             
                             
                             str += "<select id='ExpansionType" + o + "' onChange='BBB48StringExpansionTypeChanged(" + o + ");'>";
+                            str += "<option value='-1'" + (expansionType == -1 ? " selected" : "") + ">None</option>";
                             str += "<option value='0'" + (expansionType == 0 ? " selected" : "") + ">Standard</option>";
                             str += "<option value='1'" + (expansionType == 1 ? " selected" : "") + ">Differential</option>";
                             str += "</select></td><td colSpan='10'><hr></td>";
                             str += "</tr>";
+                            if (expansionType == -1) {
+                                expansions.push(o);
+                            }
                             inExpansion = true;
                         }
                         if (IsDifferential(subType, o) || IsDifferentialExpansion(inExpansion, expansionType, o)) {
@@ -536,7 +548,7 @@ function populatePixelStringOutputs(data) {
                             }
                             for (var sr = 0; sr < 4; sr++) {
                                 var o2 = o + sr;
-                                if (o2 < output.outputCount) {
+                                if (o2 < sourceOutputCount) {
                                     var port = output.outputs[o2];
                                     var strings = port.virtualStrings;
                                     if (l == 1) {
@@ -565,7 +577,7 @@ function populatePixelStringOutputs(data) {
                         }
                         o+= 3;
                     } else {
-                        if (o < output.outputCount) {
+                        if (o < sourceOutputCount && output.outputs[o].virtualStrings != null) {
                             var port = output.outputs[o];
                             for (var v = 0; v < port.virtualStrings.length; v++) {
                                 var vs = port.virtualStrings[v];
@@ -580,8 +592,14 @@ function populatePixelStringOutputs(data) {
 
                 str += "</tbody>";
                 str += "</table>";
+                str += "</div>";
+                str += "</div>";
                 
                 $('#pixelOutputs').append(str);
+                
+                expansions.forEach(function(r) {
+                                   BBB48StringExpansionTypeChanged(r);
+                                   });
                 
                 $('#BBB48String').on('mousedown', 'tr', function(event, ui) {
                     $('#pixelOutputs table tr').removeClass('selectedEntry');
@@ -610,9 +628,9 @@ function populatePixelStringOutputs(data) {
                     $('#DMXNumChannelOutput').hide();
                 }
                 if (subType == "off")  {
-                    $('#BBBSerial_Output').hide();
+                    HideTableWrapper('BBBSerial_Output');
                 } else {
-                    $('#BBBSerial_Output').show();
+                    ShowTableWrapper('BBBSerial_Output');
                 }
                 if (outputs) {
                     for (var i = 0; i < outputs.length; i++)
@@ -846,7 +864,9 @@ $(document).ready(function(){
 							<td><div id="DMXNumChannelOutput">Num&nbsp;DMX&nbsp;Channels:&nbsp;<input id='BBBSerialNumDMXChannels' size='6' maxlength='6' value='512'></div></td>
 						</tr>
                     </table>
-						<table ports='8' id='BBBSerial_Output' class='serialOutputTable'>
+                        <div class='fppTableWrapper fppTableWrapperAsTable hidden'>
+                            <div class='fppTableContents serialOutputContents'>
+						<table ports='8' id='BBBSerial_Output'>
 							<thead>
 								<tr>
 									<th width='30px'>#</th>
@@ -888,6 +908,8 @@ $(document).ready(function(){
 								</tr>
                             </tbody>
 						</table>
+                        </div>
+                        </div>
 					</span>
 				</div>
 			</div>

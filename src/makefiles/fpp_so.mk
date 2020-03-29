@@ -11,10 +11,10 @@ OBJECTS_fpp_so += \
 	channeloutput/PanelMatrix.o \
 	channeloutput/PixelString.o \
 	channeloutput/serialutil.o \
-	channeloutput/Triks-C.o \
 	channeloutput/VirtualDisplay.o \
     channeloutput/processors/OutputProcessor.o \
     channeloutput/processors/RemapOutputProcessor.o \
+    channeloutput/processors/HoldValueOutputProcessor.o \
     channeloutput/processors/SetValueOutputProcessor.o \
     channeloutput/processors/BrightnessOutputProcessor.o \
     channeloutput/processors/ColorOrderOutputProcessor.o \
@@ -45,14 +45,14 @@ OBJECTS_fpp_so += \
 	mediadetails.o \
 	mediaoutput/MediaOutputBase.o \
 	mediaoutput/mediaoutput.o \
-	mediaoutput/mpg123.o \
-	mediaoutput/ogg123.o \
 	mediaoutput/omxplayer.o \
 	mediaoutput/SDLOut.o \
 	mqtt.o \
  	NetworkMonitor.o \
 	ping.o \
-	PixelOverlay.o \
+	overlays/PixelOverlay.o \
+    overlays/PixelOverlayEffects.o \
+	overlays/PixelOverlayModel.o \
 	playlist/Playlist.o \
 	playlist/PlaylistEntryBase.o \
 	playlist/PlaylistEntryBoth.o \
@@ -85,16 +85,17 @@ OBJECTS_fpp_so += \
     util/GPIOUtils.o \
     util/I2CUtils.o \
     util/SPIUtils.o \
+    util/tinyexpr.o \
+    util/ExpressionProcessor.o \
     $(OBJECTS_GPIO_ADDITIONS)
 
 
 LIBS_fpp_so += \
-	-lboost_filesystem \
-	-lboost_system \
-	-lboost_date_time \
+	-lstdc++fs \
 	-lpthread -lrt \
     -lzstd -lz \
 	-lgpiod \
+	-lgpiodcxx \
 	-lhttpserver \
 	-ljsoncpp \
 	-lm \
@@ -108,6 +109,17 @@ LIBS_fpp_so += \
 	-lswresample \
 	-lswscale \
     $(LIBS_GPIO_ADDITIONS)
+
+
+ifneq ($(wildcard /usr/local/include/vlc/vlc.h),)
+LIBS_fpp_so += -L/usr/local/lib -lvlc
+OBJECTS_fpp_so += mediaoutput/VLCOut.o
+CFLAGS_mediaoutput/mediaoutput.o+=-DHASVLC
+endif
+
+
+util/tinyexpr.o: util/tinyexpr.c fppversion_defines.h Makefile makefiles/*.mk makefiles/platform/*.mk
+	$(CCACHE) $(CCOMPILER) $(CFLAGS) $(CFLAGS_$@) -c $< -o $@
 
 
 TARGETS += libfpp.so

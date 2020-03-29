@@ -16,6 +16,10 @@ if (!preg_match("/^$git_branch(-.*)?$/", $fpp_head_version))
 	$fpp_head_version .= " ($git_branch branch)";
 
 $IPs = explode("\n",trim(shell_exec("/sbin/ifconfig -a | cut -f1 -d' ' | grep -v ^$ | grep -v lo | grep -v eth0:0 | grep -v usb | grep -v SoftAp | grep -v 'can.' | sed -e 's/://g' | while read iface ; do /sbin/ifconfig \$iface | grep 'inet ' | awk '{print \$2}'; done")));
+$ipStr = '';
+if (count($IPs)) {
+    $ipStr = '(' . join(' ', $IPs) . ')';
+}
 ?>
 
 <?php require_once(dirname(__FILE__)."/config.php"); ?>
@@ -39,7 +43,7 @@ function list_plugin_entries($menu)
 						if ($first)
 						{
 							$first = 0;
-							echo "<li><b><font color='white' size=-1>-=- Plugins -=-</font></b></li>\n";
+							echo "<li><b><font color='white' size=-1>- - - - - - - Plugins - - - - - - -</font></b></li>\n";
 						}
 
 						-include_once($pluginDirectory."/".$plugin."/".$menu."_menu.inc");
@@ -52,7 +56,7 @@ function list_plugin_entries($menu)
 						if ($first)
 						{
 							$first = 0;
-							echo "<li><b><font color='white' size=-1>-=- Plugins -=-</font></b></li>\n";
+							echo "<li><b><font color='white' size=-1>- - - - - - - Plugins - - - - - - -</font></b></li>\n";
 						}
 
 						-include($pluginDirectory."/".$plugin."/menu.inc");
@@ -68,7 +72,7 @@ function list_plugin_entries($menu)
   <div class="header">
     <div class="headerLeft"><a href="http://www.falconchristmas.com"><img src="images/falconlogo.png" class="logo" /></a></div>
     <div class="headerCenter"><div class="siteName"><? echo $settings['Title']; ?></div>
-      Version: <a href='about.php' class='nonULLink'><?php echo $fpp_head_version; ?></a>&nbsp;&nbsp;Host: <? echo "<a href='networkconfig.php' class='nonULLink'>" . $settings['HostName'] . "</a> (" . join(' ', $IPs) . ")"; ?>
+      Version: <a href='about.php' class='nonULLink'><?php echo $fpp_head_version; ?></a>&nbsp;&nbsp;Host: <? echo "<a href='networkconfig.php' class='nonULLink'>" . $settings['HostName'] . "</a> " . $ipStr; ?>
 <?
 	if (file_exists("/etc/fpp/rfs_version") && exec('grep "^[^#].*/home/pi/media" /etc/fstab') )
 	{
@@ -133,13 +137,10 @@ function list_plugin_entries($menu)
       <li><a>Status/Control</a>
         <ul>
           <li><a href="index.php">Status Page</a></li>
-          <li><a href="uipassword.php">Set UI Password</a></li>
-          <li><a href="timeconfig.php">Config/Set Time</a></li>
           <li><a href="networkconfig.php">Network</a></li>
           <li><a href="multisync.php">MultiSync</a></li>
           <li><a href="settings.php">FPP Settings</a></li>
           <li><a href="backup.php">FPP Backup</a></li>
-          <li><a href="email.php">Email Settings</a></li>
           <li><a href="proxies.php">Proxy Settings</a></li>
           <li><a href="events.php">Events</a></li>
           <li><a href="effects.php">Effects</a></li>
@@ -184,6 +185,9 @@ function list_plugin_entries($menu)
           <li><a href="https://docs.google.com/viewer?url=https://falconchristmas.github.io/FPP_Manual.pdf" target="_blank">FPP Manual</a></li>
           <li><a href="http://falconchristmas.com/wiki/index.php/Falcon_FPP" target="_blank">Wiki/Help</a></li>
           <li><a href="help.php">Help Index</a></li>
+<? if ($settings['uiLevel'] > 0) { ?>
+          <li><a href="api/help">REST API Help</a></li>
+<? } ?>
           <li><a href="cliHelp.php">fpp &amp; fppmm Usage</a></li>
           <li><a href="troubleshooting.php">Troubleshooting Commands</a></li>
           <li><a href="http://<?php echo $_SERVER['SERVER_ADDR'] ?>:4200" target="_new">SSH Shell</a></li>

@@ -28,7 +28,7 @@ void usage(char *appname) {
     printf("   -r (#-# | #+#)    - Channel Range.  Use - to separate start/end channel\n");
     printf("                            Use + to separate start channel + num channels\n");
     printf("   -n                - No Sparse. -r will only read the range, but the resulting fseq is not sparse.\n");
-    printf("   -j                - Output the fseq file metadata to json");
+    printf("   -j                - Output the fseq file metadata to json\n");
     printf("   -h                - This help output\n");
 }
 const char *outputFilename = nullptr;
@@ -85,8 +85,11 @@ int parseArguments(int argc, char **argv) {
                     compressionType = V2FSEQFile::CompressionType::none;
                 } else if (strcmp(optarg, "zlib") == 0) {
                     compressionType = V2FSEQFile::CompressionType::zlib;
-                } else {
+                } else if (strcmp(optarg, "zstd") == 0) {
                     compressionType = V2FSEQFile::CompressionType::zstd;
+                } else {
+                    printf("Unknown compression type: %s\n", optarg);
+                    exit(EXIT_FAILURE);
                 }
                 break;
             case 'l':
@@ -185,7 +188,7 @@ int main(int argc, char *argv[]) {
                     printf("]");
                 }
             }
-            printf("}");
+            printf("}\n");
         } else {
             std::vector<FSEQFile *> merges;
             for (auto &f : mergeFseqs) {
@@ -194,11 +197,26 @@ int main(int argc, char *argv[]) {
                     merges.push_back(src);
                 }
             }
+
+            if (outputFilename == nullptr) {
+                if (!verbose) {
+                    printf("No output file defined!\n");
+                    printf("Use -v to enable verbose output printing for file information.\n");
+                }
+                delete src;
+                return 0;
+            }
             
             FSEQFile *dest = FSEQFile::createFSEQFile(outputFilename,
                                                       fseqVersion,
                                                       compressionType,
                                                       compressionLevel);
+            if (dest == nullptr) {
+                printf("Failed to create FSEQ file (returned nullptr)!\n");
+                delete src;
+                return 1;
+            }
+            
             if (ranges.empty()) {
                 ranges.push_back(std::pair<uint32_t, uint32_t>(0, 999999999));
             } else if (fseqVersion == 2 && sparse) {

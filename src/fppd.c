@@ -41,7 +41,7 @@
 #include "mediadetails.h"
 #include "mediaoutput/mediaoutput.h"
 #include "mqtt.h"
-#include "PixelOverlay.h"
+#include "overlays/PixelOverlay.h"
 #include "playlist/Playlist.h"
 #include "Plugins.h"
 #include "Scheduler.h"
@@ -321,30 +321,14 @@ inline void WriteRuntimeInfoFile(Json::Value v) {
     Json::Value local = systems[0];
     local.removeMember("address");
     local["addresses"] = addresses;
-    
-    Json::FastWriter fastWriter;
-    std::string resultStr = fastWriter.write(local);
-    FILE *file = fopen("/home/fpp/media/fpp-info.json", "w");
-    if (file)
-    {
-        fprintf(file, "%s\n", resultStr.c_str());
-        fclose(file);
-        
-        struct passwd *pwd = getpwnam("fpp");
-        chown("/home/fpp/media/fpp-info.json", pwd->pw_uid, pwd->pw_gid);
-    }
+
+    SaveJsonToFile(local, "/home/fpp/media/fpp-info.json");
 }
 
 static void initCapeFromFile(const char *f) {
     if (FileExists(f)) {
-        std::ifstream t(f);
-        std::stringstream buffer;
-        buffer << t.rdbuf();
-        std::string config = buffer.str();
         Json::Value root;
-        Json::Reader reader;
-        bool success = reader.parse(buffer.str(), root);
-        if (success) {
+        if (LoadJsonFromFile(f, root)) {
             Sensors::INSTANCE.addSensors(root["sensors"]);
         }
     }
@@ -383,7 +367,6 @@ printf("Usage: %s [OPTION...]\n"
 "  -l, --log-file FILENAME       - Set the log file\n"
 "  -b, --bytes-file FILENAME     - Set the bytes received file\n"
 "  -H  --detect-hardware         - Detect Falcon hardware on SPI port\n"
-"      --detect-piface           - Detect PiFace hardware on SPI port\n"
 "  -C  --configure-hardware      - Configured detected Falcon hardware on SPI\n"
 "  -h, --help                    - This menu.\n"
 "      --log-level LEVEL         - Set the log output level:\n"
@@ -476,15 +459,6 @@ int parseArguments(int argc, char **argv)
 					LogInfo(VB_SETTING, "Log Mask set to %d (%s)\n", logMask, optarg);
 				}
 				break;
-            case 4: // detect-piface
-                PinCapabilities::InitGPIO();
-                if (PinCapabilities::getPinByGPIO(200).ptr()) {
-                    printf("PiFace found\n");
-                    exit(1);
-                } else {
-                    exit(0);
-                }
-                break;
 			case 'c': //config-file
 				if (FileExists(optarg))
 				{
@@ -556,10 +530,6 @@ int parseArguments(int argc, char **argv)
 				free(settings.pixelnetFile);
 				settings.pixelnetFile = strdup(optarg);
 				break;
-			case 's': //schedule-file
-				free(settings.scheduleFile);
-				settings.scheduleFile = strdup(optarg);
-				break;
 			case 'l': //log-file
 				free(settings.logFile);
 				settings.logFile = strdup(optarg);
@@ -585,11 +555,7 @@ int parseArguments(int argc, char **argv)
 		}
 	}
 
-	if (getDaemonize())
-		SetLogFile(getLogFile());
-	else
-		SetLogFile("");
-
+    SetLogFile(getLogFile(), !getDaemonize());
 	return 0;
 }
 
@@ -616,18 +582,17 @@ int main(int argc, char *argv[])
 	if (loggingToFile())
 		logVersionInfo();
 
-	printVersionInfo();
-
 	// Start functioning
     if (getDaemonize()) {
 		CreateDaemon();
     }
     PinCapabilities::InitGPIO();
+    GPIOManager::ConvertOldSettings();
 
     
     CommandManager::INSTANCE.Init();
 	if (strcmp(getSetting("MQTTHost"),"")) {
-		mqtt = new MosquittoClient(getSetting("MQTTHost"), getSettingInt("MQTTPort"), getSetting("MQTTPrefix"));
+		mqtt = new MosquittoClient(getSetting("MQTTHost"), getSettingInt("MQTTPort",1883), getSetting("MQTTPrefix"));
 
 		if (!mqtt || !mqtt->Init(getSetting("MQTTUsername"), getSetting("MQTTPassword"), getSetting("MQTTCaFile")))
 			exit(EXIT_FAILURE);
@@ -639,9 +604,8 @@ int main(int argc, char *argv[])
 	scheduler = new Scheduler();
 	playlist = new Playlist();
 	sequence  = new Sequence();
-	multiSync = new MultiSync();
 
-    if (!multiSync->Init()) {
+    if (!MultiSync::INSTANCE.Init()) {
 		exit(EXIT_FAILURE);
     }
     
@@ -680,12 +644,10 @@ int main(int argc, char *argv[])
 	if (getFPPmode() & PLAYER_MODE) {
 		CloseEffects();
 	}
-    CleanupGPIOInput();
-
 	CloseChannelOutputs();
+    GPIOManager::INSTANCE.Cleanup();
     CommandManager::INSTANCE.Cleanup();
 
-	delete multiSync;
 	delete scheduler;
 	delete playlist;
 	delete sequence;
@@ -757,11 +719,12 @@ void MainLoop(void)
     } else {
         Fake_Bridge_Initialize(callbacks);
     }
-    SetupGPIOInput(callbacks);
 
     APIServer apiServer;
     apiServer.Init();
+    
 
+    GPIOManager::INSTANCE.Initialize(callbacks);
     PluginManager::INSTANCE.addControlCallbacks(callbacks);
     NetworkMonitor::INSTANCE.Init(callbacks);
     
@@ -812,7 +775,7 @@ void MainLoop(void)
 		// Check to see if we need to start up the output thread.
 		if ((getFPPmode() != BRIDGE_MODE) &&
             (!ChannelOutputThreadIsRunning()) &&
-            ((PixelOverlayManager::INSTANCE.UsingMemoryMapInput()) ||
+            ((PixelOverlayManager::INSTANCE.hasActiveOverlays()) ||
              (ChannelTester::INSTANCE.Testing()) ||
 			 (getAlwaysTransmit()))) {
 			int E131BridgingInterval = getSettingInt("E131BridgingInterval");
@@ -890,7 +853,7 @@ void MainLoop(void)
             idleCount = 0;
             multiSync->PeriodicPing();
         }
-		CheckGPIOInputs();
+        GPIOManager::INSTANCE.CheckGPIOInputs();
 	}
     close(epollf);
 
