@@ -439,6 +439,25 @@ h2 {
         </fieldset>
       </div>
     </div>
+	<div id="tab-stylesheets">
+      <div id= "divStylesheets">
+        <fieldset  class="fs">
+          <legend> Uploaded Files </legend>
+          <div id="divStylesheetsData">
+            <table id="tblStylesheets">
+            </table>
+          </div>
+          <hr />
+          <div class='right'>
+            <input onclick="ClearSelections('Stylesheets');" class="buttons" type="button" value="Clear Selection" style="float: left;" />
+            <input onclick="ButtonHandler('Uploads', 'download');" class="disableButtons singleUploadsButton multiUploadsButton" type="button"  value="Download" />
+            <input onclick="ButtonHandler('Uploads', 'delete');" class="disableButtons singleUploadsButton multiUploadsButton" type="button"  value="Delete" />
+          </div>
+          <font size=-1><b>CTRL+Click to select multiple items</b></font>
+        </fieldset>
+      </div>
+    </div>  
+    
     <div id='fileUploader' class='ui-tabs-panel'>
       <fieldset class='fs'>
         <legend> Upload Files </legend>
